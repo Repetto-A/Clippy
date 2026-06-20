@@ -25,6 +25,16 @@ class ClipStatus(str, Enum):
     EDITED = "edited"
 
 
+class RejectionReason(str, Enum):
+    """Why a clip was rejected. Each value calibrates a rubric sub-score (M1 eval loop)."""
+
+    BAD_HOOK = "bad_hook"                    # weak opening → hook_strength
+    NOT_SELF_CONTAINED = "not_self_contained"  # needs the rest of the class → self_contained
+    BAD_CUT = "bad_cut"                      # in/out poorly placed → payoff
+    DIRTY_SCREEN = "dirty_screen"            # Meet UI / browser visible (pre-filtered)
+    WEAK_TOPIC = "weak_topic"                # no clear takeaway → takeaway_clarity
+
+
 class JobStage(str, Enum):
     """Etapa del pipeline para status.json (consumible por UI)."""
 
@@ -100,7 +110,13 @@ class ClipCandidate(BaseModel):
     id: str
     start: float
     end: float
-    score: float = 0.0              # 0-100
+    score: float = 0.0              # 0-100 (combined)
+    # Rubric sub-scores (0-100), filled by the rank pass; default 0 for legacy/scan-only clips.
+    hook_strength: float = 0.0
+    self_contained: float = 0.0
+    takeaway_clarity: float = 0.0
+    payoff: float = 0.0
+    rejection_reason: RejectionReason | None = None
     reason: str = ""
     title: str = ""
     hook: str = ""
@@ -121,6 +137,35 @@ class CandidateSet(BaseModel):
 
     source: str
     candidates: list[ClipCandidate] = Field(default_factory=list)
+
+
+class GoldenRange(BaseModel):
+    """A human-judged time range: approved (good clip) or rejected (with reason)."""
+
+    start: float
+    end: float
+    approved: bool
+    reason: RejectionReason | None = None
+
+    @property
+    def duration(self) -> float:
+        return max(0.0, self.end - self.start)
+
+
+class GoldenSet(BaseModel):
+    """Human judgment per class, by time range (artifact labels.json).
+
+    Persisted separately from candidates.json so re-running a stage never overwrites it.
+    """
+
+    source: str
+    ranges: list[GoldenRange] = Field(default_factory=list)
+
+    def approved(self) -> list[GoldenRange]:
+        return [r for r in self.ranges if r.approved]
+
+    def rejected(self) -> list[GoldenRange]:
+        return [r for r in self.ranges if not r.approved]
 
 
 class JobStatusRecord(BaseModel):
