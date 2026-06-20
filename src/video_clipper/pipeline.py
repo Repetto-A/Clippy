@@ -26,6 +26,8 @@ from .render import render_clip_cwd
 
 from .scoring import get_scorer
 
+from .ranker import rank
+
 from .selection import refine
 
 from .signals import extract_signals
@@ -143,6 +145,10 @@ def stage_propose(source: Path, *, track: bool = True) -> None:
     scorer = get_scorer()
 
     raw = scorer.propose(transcript, signals)
+
+    # Pasada 2 (rank+refine) solo en el path LLM; el heurístico no llama al modelo.
+    if settings.scorer != "heuristic":
+        raw = rank(raw, transcript, signals)
 
     selected = refine(raw, transcript, signals)
 
