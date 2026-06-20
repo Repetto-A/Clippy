@@ -25,24 +25,55 @@ from .config import settings
 
 # --- Prompts compartidos entre backends ---------------------------------------
 
-def build_score_prompt(payload: dict) -> tuple[str, str]:
+def build_scan_prompt(payload: dict) -> tuple[str, str]:
+    """Pasada 1 (scan): recall alto, bordes aproximados, evita tramos sucios."""
     system = (
         "Sos un editor experto de contenido corto educativo en español. "
         "Recibís la transcripción de una capacitación/stream con timestamps. "
-        "Tu trabajo es detectar los momentos más clipeables: explicaciones auto-contenidas, "
-        "insights, tips accionables, analogías potentes o preguntas/respuestas del Q&A. "
-        "Cada clip debe tener sentido por sí solo y durar entre "
+        "Este es el PRIMER PASE (scan): marcá GENEROSAMENTE los momentos potencialmente "
+        "clipeables —explicaciones auto-contenidas, insights, tips, analogías, Q&A—. "
+        "Priorizá recall: mejor sobrar candidatos que perder un buen momento; otro pase filtra. "
+        "Cada clip debe durar entre "
         f"{int(payload.get('min_duration', 15))} y {int(payload.get('max_duration', 60))} segundos. "
         "Respondé SOLO JSON válido."
     )
+    dirty = payload.get("dirty_ranges") or []
+    dirty_note = ""
+    if dirty:
+        ranges = ", ".join(f"[{float(a):.1f}-{float(b):.1f}]" for a, b in dirty)
+        dirty_note = (
+            "\n\nEVITÁ estos tramos (la pantalla muestra UI/navegador, no sirven como clip): "
+            f"{ranges}.\n"
+        )
     user = (
         "Transcripción (cada línea: [start-end] texto). "
-        "Los timestamps son segundos absolutos desde el inicio del video completo, "
-        "no relativos al fragmento:\n\n"
-        f"{payload['transcript_lines']}\n\n"
+        "Los timestamps son segundos absolutos desde el inicio del video completo:\n\n"
+        f"{payload['transcript_lines']}"
+        f"{dirty_note}\n\n"
         f"Devolvé hasta {payload.get('target_clips', 12)} momentos con este formato JSON:\n"
         '{"clips": [{"start": float, "end": float, "score": 0-100, "reason": str, '
         '"title": str, "hook": str}]}'
+    )
+    return system, user
+
+
+def build_rank_prompt(payload: dict) -> tuple[str, str]:
+    """Pasada 2 (rank+refine): juzga finalistas en una escala única, hook-first."""
+    system = (
+        "Sos un editor EXIGENTE de shorts educativos en español. Recibís una lista de clips "
+        "finalistas con su transcripción completa. Juzgalos cabeza a cabeza en UNA escala "
+        "comparable. El clip debe ABRIR en el hook (engancha en los primeros segundos) y CERRAR "
+        "en un remate. Sé duro. Respondé SOLO JSON válido."
+    )
+    user = (
+        "Clips finalistas:\n\n"
+        f"{payload['clips_block']}\n\n"
+        "Para cada clip devolvé las sub-scores 0-100 y los cortes hook-first. Formato JSON:\n"
+        '{"clips": [{"id": str, "hook_strength": 0-100, "self_contained": 0-100, '
+        '"takeaway_clarity": 0-100, "payoff": 0-100, "start": float, "end": float, '
+        '"title": str, "hook": str, "reason": str}]}\n'
+        f"Duración objetivo: {int(payload.get('min_duration', 15))}-"
+        f"{int(payload.get('max_duration', 60))} s."
     )
     return system, user
 
@@ -67,9 +98,19 @@ def _extract_json(text: str) -> dict:
 
 
 _PROMPTS = {
-    "score_moments": build_score_prompt,
+    "score_moments": build_scan_prompt,
+    "rank_moments": build_rank_prompt,
     "translate": build_translate_prompt,
 }
+
+
+def model_for_task(task: str) -> str:
+    """Resolve the model for a task: cheap scan tier vs better rank tier."""
+    if task == "score_moments":
+        return settings.scan_model
+    if task == "rank_moments":
+        return settings.rank_model
+    return settings.llm_model
 
 
 class TaskRouter(Protocol):
@@ -88,7 +129,7 @@ class OllamaRouter:
             raise ValueError(f"Tarea no soportada: {task}")
         system, user = _PROMPTS[task](payload)
         body = json.dumps({
-            "model": self.model,
+            "model": model_for_task(task),
             "messages": [
                 {"role": "system", "content": system},
                 {"role": "user", "content": user},
@@ -131,7 +172,7 @@ class OpenCodeRouter:
             # El mensaje va ANTES de -f: --file es un flag tipo array (greedy) y si va
             # último se comería el texto del mensaje como si fuera otra ruta de archivo.
             cmd = [
-                self.bin, "run", "-m", self.model, "--pure",
+                self.bin, "run", "-m", model_for_task(task), "--pure",
                 "Segui estrictamente las instrucciones del archivo adjunto. "
                 "Responde SOLO con JSON valido, sin markdown ni texto extra.",
                 "-f", str(pf),
@@ -172,7 +213,7 @@ class ClaudeRouter:
         system, user = _PROMPTS[task](payload)
         client = self._client()
         msg = client.messages.create(
-            model=self.model,
+            model=model_for_task(task),
             max_tokens=4000,
             system=system,
             messages=[{"role": "user", "content": user}],

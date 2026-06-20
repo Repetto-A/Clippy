@@ -66,6 +66,9 @@ class Settings(BaseModel):
     scorer: str = _get("VC_SCORER", "llm")     # "heuristic" | "llm"
     llm_provider: str = _get("VC_LLM_PROVIDER", "opencode")   # "ollama" | "opencode" | "anthropic"
     llm_model: str = _get("VC_LLM_MODEL", "opencode-go/deepseek-v4-flash")
+    # Motor de dos pasadas (M2): tier barato para el scan, tier mejor para el rank.
+    scan_model: str = _get("VC_SCAN_MODEL", _get("VC_LLM_MODEL", "opencode-go/deepseek-v4-flash"))
+    rank_model: str = _get("VC_RANK_MODEL", "opencode-go/deepseek-v4-pro")
     ollama_host: str = _get("VC_OLLAMA_HOST", "http://localhost:11434")
     opencode_timeout: float = _get_float("VC_OPENCODE_TIMEOUT", 600.0)
     anthropic_api_key: str = _get("ANTHROPIC_API_KEY", "")
@@ -77,6 +80,15 @@ class Settings(BaseModel):
 
     # Eval (M1): umbral de solape IoU que cuenta como "match" contra el golden set
     eval_iou_threshold: float = _get_float("VC_EVAL_IOU", 0.5)
+
+    # Motor de selección (M2): pasada 2 (rank)
+    rank_finalists: int = _get_int("VC_RANK_FINALISTS", 24)
+    chunk_overlap_segments: int = _get_int("VC_CHUNK_OVERLAP", 1)
+    # Pesos de la rúbrica (combinación de sub-scores)
+    w_hook: float = _get_float("VC_W_HOOK", 0.25)
+    w_self_contained: float = _get_float("VC_W_SELF", 0.25)
+    w_takeaway: float = _get_float("VC_W_TAKEAWAY", 0.25)
+    w_payoff: float = _get_float("VC_W_PAYOFF", 0.25)
 
     # Chunking LLM (videos largos)
     llm_chunk_chars: int = _get_int("VC_LLM_CHUNK_CHARS", 12000)
