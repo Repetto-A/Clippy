@@ -3,8 +3,12 @@
 from __future__ import annotations
 
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 from .models import CandidateSet, GoldenSet, JobStatusRecord, Signals, Transcript
+
+if TYPE_CHECKING:
+    from .eval import EvalReport
 
 
 def save_transcript(t: Transcript, workdir: Path) -> Path:
@@ -50,6 +54,13 @@ def load_golden(workdir: Path, source: str = "") -> GoldenSet:
     if not p.exists():
         return GoldenSet(source=source)
     return GoldenSet.model_validate_json(p.read_text(encoding="utf-8"))
+
+
+def save_eval_report(r: EvalReport, workdir: Path) -> Path:
+    """Persist the eval metric of a run against the golden set (eval_report.json)."""
+    p = workdir / "eval_report.json"
+    p.write_text(r.model_dump_json(indent=2), encoding="utf-8")
+    return p
 
 
 def save_job_status(j: JobStatusRecord, workdir: Path) -> Path:

@@ -7,6 +7,8 @@ beats the current baseline instead of being judged by eye.
 
 from __future__ import annotations
 
+from pathlib import Path
+
 from pydantic import BaseModel, Field
 
 from .models import ClipCandidate, GoldenSet
@@ -62,3 +64,14 @@ def evaluate(
         recall=covered / len(approved) if approved else 0.0,
         false_positives_by_reason=fp,
     )
+
+
+def run_eval(workdir: Path, n: int, iou_threshold: float) -> EvalReport:
+    """Load candidates + golden set from a workdir, compute the metric, persist the report."""
+    from . import storage
+
+    cset = storage.load_candidates(workdir)
+    golden = storage.load_golden(workdir, source=cset.source)
+    rep = evaluate(cset.candidates, golden, n=n, iou_threshold=iou_threshold)
+    storage.save_eval_report(rep, workdir)
+    return rep

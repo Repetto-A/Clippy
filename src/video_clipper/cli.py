@@ -267,6 +267,16 @@ def render(
 
 
 
+@app.command(name="eval")
+def eval_cmd(source: SourceArg) -> None:
+    """Evalúa los candidatos contra el golden set (labels.json) → eval_report.json."""
+    from .eval import run_eval
+
+    workdir = settings.source_workdir(source)
+    rep = run_eval(workdir, n=settings.target_clips, iou_threshold=settings.eval_iou_threshold)
+    console.print(rep.model_dump())
+
+
 @app.command()
 def serve(
     host: Annotated[str, typer.Option(help="Host")] = "127.0.0.1",

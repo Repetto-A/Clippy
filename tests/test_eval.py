@@ -53,3 +53,24 @@ def test_empty_golden_does_not_crash():
     rep = evaluate(proposed, GoldenSet(source="c"), n=12, iou_threshold=0.5)
     assert rep.recall == 0.0
     assert rep.precision_at_n == 0.0
+
+
+def test_run_eval_writes_report(tmp_path):
+    from video_clipper import storage
+    from video_clipper.eval import run_eval
+    from video_clipper.models import CandidateSet
+
+    storage.save_candidates(
+        CandidateSet(
+            source="c1",
+            candidates=[ClipCandidate(id="a1", start=11, end=31, score=90)],
+        ),
+        tmp_path,
+    )
+    storage.save_golden(
+        GoldenSet(source="c1", ranges=[GoldenRange(start=10, end=30, approved=True)]),
+        tmp_path,
+    )
+    rep = run_eval(tmp_path, n=12, iou_threshold=0.5)
+    assert rep.matched == 1
+    assert (tmp_path / "eval_report.json").exists()
