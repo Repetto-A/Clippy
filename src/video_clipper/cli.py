@@ -22,7 +22,7 @@ from . import job_status, pipeline, review
 
 from .config import settings
 
-from .models import ClipStatus
+from .models import ClipStatus, RejectionReason
 
 
 
@@ -196,11 +196,18 @@ def approve(source: SourceArg, clip_id: str) -> None:
 
 @app.command()
 
-def reject(source: SourceArg, clip_id: str) -> None:
+def reject(
+    source: SourceArg,
+    clip_id: str,
+    reason: Annotated[
+        RejectionReason | None,
+        typer.Option(help="Razón del rechazo (alimenta el golden set / rúbrica)"),
+    ] = None,
+) -> None:
 
-    """Rechaza un clip por ID."""
+    """Rechaza un clip por ID, con razón opcional."""
 
-    review.set_status(source, clip_id, ClipStatus.REJECTED)
+    review.set_status(source, clip_id, ClipStatus.REJECTED, rejection_reason=reason)
 
 
 

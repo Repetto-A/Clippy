@@ -1,0 +1,11 @@
+{
+  "source": "c1",
+  "ranges": [
+    {
+      "start": 10.0,
+      "end": 30.0,
+      "approved": true,
+      "reason": null
+    }
+  ]
+}

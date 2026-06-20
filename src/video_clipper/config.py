@@ -75,6 +75,9 @@ class Settings(BaseModel):
     max_duration: float = _get_float("VC_MAX_DURATION", 60.0)
     target_clips: int = _get_int("VC_TARGET_CLIPS", 12)
 
+    # Eval (M1): umbral de solape IoU que cuenta como "match" contra el golden set
+    eval_iou_threshold: float = _get_float("VC_EVAL_IOU", 0.5)
+
     # Chunking LLM (videos largos)
     llm_chunk_chars: int = _get_int("VC_LLM_CHUNK_CHARS", 12000)
     llm_clips_per_chunk: int = _get_int("VC_LLM_CLIPS_PER_CHUNK", 6)

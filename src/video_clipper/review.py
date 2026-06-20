@@ -10,7 +10,7 @@ from rich.table import Table
 from . import storage
 from .clip_utils import clamp_range, sync_clip_words
 from .config import settings
-from .models import ClipStatus
+from .models import ClipStatus, GoldenRange, RejectionReason
 
 console = Console()
 
@@ -56,16 +56,47 @@ def show(source: Path) -> None:
     console.print(table)
 
 
-def set_status(source: Path, clip_id: str, status: ClipStatus) -> None:
+def set_status(
+    source: Path,
+    clip_id: str,
+    status: ClipStatus,
+    rejection_reason: RejectionReason | None = None,
+) -> None:
     workdir = settings.source_workdir(source)
     cset = storage.load_candidates(workdir)
     for c in cset.candidates:
         if c.id == clip_id:
             c.status = status
+            if status is ClipStatus.REJECTED:
+                c.rejection_reason = rejection_reason
             storage.save_candidates(cset, workdir)
-            console.print(f"[green]{clip_id}[/] -> {status.value}")
+            _record_golden(workdir, cset.source, c, status, rejection_reason)
+            suffix = f" ({rejection_reason.value})" if rejection_reason else ""
+            console.print(f"[green]{clip_id}[/] -> {status.value}{suffix}")
             return
     console.print(f"[red]No se encontró el clip {clip_id}[/]")
+
+
+def _record_golden(workdir, source, clip, status, reason) -> None:
+    """Persist the human judgment of a clip into the golden set (labels.json).
+
+    Only approve/reject are recorded; re-judging the same time range replaces its entry.
+    """
+    if status not in (ClipStatus.APPROVED, ClipStatus.REJECTED):
+        return
+    gs = storage.load_golden(workdir, source=source)
+    gs.ranges = [
+        r for r in gs.ranges if not (r.start == clip.start and r.end == clip.end)
+    ]
+    gs.ranges.append(
+        GoldenRange(
+            start=clip.start,
+            end=clip.end,
+            approved=(status is ClipStatus.APPROVED),
+            reason=reason if status is ClipStatus.REJECTED else None,
+        )
+    )
+    storage.save_golden(gs, workdir)
 
 
 def set_range(source: Path, clip_id: str, start: float, end: float) -> None:

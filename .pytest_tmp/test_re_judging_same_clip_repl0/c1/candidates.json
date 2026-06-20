@@ -1,0 +1,25 @@
+{
+  "source": "c1",
+  "candidates": [
+    {
+      "id": "a1",
+      "start": 10.0,
+      "end": 30.0,
+      "score": 80.0,
+      "hook_strength": 0.0,
+      "self_contained": 0.0,
+      "takeaway_clarity": 0.0,
+      "payoff": 0.0,
+      "rejection_reason": "weak_topic",
+      "reason": "",
+      "title": "",
+      "hook": "",
+      "transcript": "",
+      "words": [],
+      "layout": "A",
+      "status": "approved",
+      "captions": [],
+      "outputs": {}
+    }
+  ]
+}
