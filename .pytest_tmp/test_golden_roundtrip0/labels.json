@@ -1,0 +1,17 @@
+{
+  "source": "c1",
+  "ranges": [
+    {
+      "start": 5.0,
+      "end": 25.0,
+      "approved": true,
+      "reason": null
+    },
+    {
+      "start": 60.0,
+      "end": 90.0,
+      "approved": false,
+      "reason": "weak_topic"
+    }
+  ]
+}

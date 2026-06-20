@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from .models import CandidateSet, JobStatusRecord, Signals, Transcript
+from .models import CandidateSet, GoldenSet, JobStatusRecord, Signals, Transcript
 
 
 def save_transcript(t: Transcript, workdir: Path) -> Path:
@@ -35,6 +35,21 @@ def save_candidates(c: CandidateSet, workdir: Path) -> Path:
 
 def load_candidates(workdir: Path) -> CandidateSet:
     return CandidateSet.model_validate_json((workdir / "candidates.json").read_text(encoding="utf-8"))
+
+
+def save_golden(g: GoldenSet, workdir: Path) -> Path:
+    """Persist the human golden set (labels.json), separate from candidates.json."""
+    p = workdir / "labels.json"
+    p.write_text(g.model_dump_json(indent=2), encoding="utf-8")
+    return p
+
+
+def load_golden(workdir: Path, source: str = "") -> GoldenSet:
+    """Load the golden set; return an empty set (no labels yet) when the file is absent."""
+    p = workdir / "labels.json"
+    if not p.exists():
+        return GoldenSet(source=source)
+    return GoldenSet.model_validate_json(p.read_text(encoding="utf-8"))
 
 
 def save_job_status(j: JobStatusRecord, workdir: Path) -> Path:
