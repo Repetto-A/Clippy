@@ -46,12 +46,13 @@ def refine(
     transcript: Transcript,
     signals: Signals,
 ) -> list[ClipCandidate]:
-    silence_ends = [s.end for s in signals.silences]
     silence_starts = [s.start for s in signals.silences]
 
     refined: list[ClipCandidate] = []
     for c in candidates:
-        start = _snap(c.start, silence_ends, window=1.5)
+        # Hook-first: keep the in-point pinned (the ranker chose it on the hook); only the
+        # out-point snaps to a nearby silence so the clip breathes at the close.
+        start = c.start
         end = _snap(c.end, silence_starts, window=1.5)
         if end - start < settings.min_duration:
             end = start + settings.min_duration
