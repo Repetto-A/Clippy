@@ -1,0 +1,147 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Video Clipper</title>
+  <link rel="stylesheet" href="/styles.css" />
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand">Video Clipper</div>
+    <button id="btn-back" class="ghost hidden" type="button">← Volver</button>
+  </header>
+
+  <main id="view-inbox" class="view">
+    <section class="dropzone" id="dropzone">
+      <input type="file" id="file-input" accept="video/mp4" hidden />
+      <p class="drop-title">Arrastrá un .mp4 acá</p>
+      <p class="drop-sub">o hacé click para elegir · el pipeline corre en background</p>
+    </section>
+    <section>
+      <h2>Trabajos</h2>
+      <div id="jobs-list" class="jobs-list"></div>
+    </section>
+  </main>
+
+  <main id="view-job" class="view hidden">
+    <div class="job-header">
+      <h1 id="job-title"></h1>
+      <div id="job-meta" class="meta"></div>
+      <div class="job-actions">
+        <button id="btn-render" class="primary" type="button">Renderizar aprobados</button>
+        <button id="btn-retry" class="ghost hidden" type="button">Reintentar procesamiento</button>
+      </div>
+    </div>
+    <section id="renders-section" class="hidden">
+      <h2>Clips renderizados</h2>
+      <div id="renders-list" class="renders-list"></div>
+    </section>
+    <h2>Candidatos</h2>
+    <div id="clips-list" class="clips-grid"></div>
+  </main>
+
+  <main id="view-editor" class="view hidden editor-view">
+    <div class="editor-header">
+      <div>
+        <h1 id="editor-clip-title">Clip</h1>
+        <p id="editor-clip-meta" class="meta"></p>
+      </div>
+      <div class="clip-actions">
+        <button id="btn-approve" class="primary" type="button">Aprobar</button>
+        <button id="btn-reject" class="danger" type="button">Rechazar</button>
+      </div>
+    </div>
+
+    <div class="editor-layout">
+      <div class="editor-workspace">
+        <div class="editor-toolbar">
+          <button id="btn-play" type="button" title="Espacio">▶</button>
+          <button id="btn-step-back" type="button" title="← 0.5s">⏮</button>
+          <button id="btn-step-fwd" type="button" title="→ 0.5s">⏭</button>
+          <span class="toolbar-sep"></span>
+          <button id="btn-set-in" type="button" title="I">In</button>
+          <button id="btn-set-out" type="button" title="O">Out</button>
+          <button id="btn-save-range" class="primary" type="button">Guardar rango</button>
+          <span class="toolbar-spacer"></span>
+          <span id="transport-time" class="transport-time">0:00.0 / 0:00.0</span>
+        </div>
+
+        <div class="preview-stage">
+          <video id="player" playsinline></video>
+          <div class="preview-overlay">
+            <button id="btn-overlay-play" type="button" class="overlay-btn" title="Espacio">▶</button>
+            <div class="preview-progress" id="preview-progress">
+              <div class="preview-progress-fill" id="preview-progress-fill"></div>
+            </div>
+            <span id="overlay-time" class="overlay-time">0:00</span>
+          </div>
+        </div>
+
+        <div class="timeline-dock">
+          <div class="timeline-toolbar">
+            <span class="timeline-toolbar-label">Timeline</span>
+            <button id="btn-zoom-out" type="button" title="Alejar">−</button>
+            <span id="zoom-label" class="zoom-label">100%</span>
+            <button id="btn-zoom-in" type="button" title="Acercar">+</button>
+            <button id="btn-zoom-fit" type="button" title="Encuadrar clip">Fit</button>
+          </div>
+          <div class="timeline-scroll" id="timeline-scroll">
+            <div class="timeline-inner" id="timeline-inner">
+              <div class="timeline-ruler" id="timeline-ruler"></div>
+              <div class="track-row">
+                <div class="track-label">Video</div>
+                <div class="track-lane" id="video-track">
+                  <div class="timeline-clip" id="timeline-clip"></div>
+                  <div class="timeline-handle handle-start" id="handle-start"></div>
+                  <div class="timeline-handle handle-end" id="handle-end"></div>
+                </div>
+              </div>
+              <div class="track-row">
+                <div class="track-label">Subs</div>
+                <div class="track-lane subs-lane" id="subs-track"></div>
+              </div>
+              <div class="timeline-playhead" id="timeline-playhead">
+                <div class="playhead-cap"></div>
+              </div>
+            </div>
+          </div>
+          <div class="range-toolbar">
+            <div class="range-readout">
+              <span id="readout-start">0:00</span> — <span id="readout-end">0:00</span>
+              (<span id="readout-dur">0s</span>)
+            </div>
+            <div class="range-nudge">
+              <button id="btn-nudge-in-minus" type="button" title="[">In −0.1s</button>
+              <button id="btn-nudge-in-plus" type="button" title="Shift+[">In +0.1s</button>
+              <button id="btn-nudge-out-minus" type="button" title="Shift+]">Out −0.1s</button>
+              <button id="btn-nudge-out-plus" type="button" title="]">Out +0.1s</button>
+            </div>
+          </div>
+        </div>
+
+        <input type="range" id="range-start" class="sr-only" min="0" max="100" step="0.05" />
+        <input type="range" id="range-end" class="sr-only" min="0" max="100" step="0.05" />
+      </div>
+
+      <div class="words-panel">
+        <div class="words-panel-head">
+          <h3>Subtítulos</h3>
+          <p class="hint">Click busca · doble click edita · Enter guarda · Esc cancela</p>
+        </div>
+        <div id="words-list" class="words-list"></div>
+      </div>
+    </div>
+
+    <aside class="shortcuts-panel">
+      <span>Espacio play/pause</span>
+      <span>← → ±0.5s</span>
+      <span>I / O marcar in/out</span>
+      <span>[ / ] nudge in/out</span>
+    </aside>
+  </main>
+
+  <div id="toast" class="toast hidden"></div>
+  <script src="/app.js"></script>
+</body>
+</html>

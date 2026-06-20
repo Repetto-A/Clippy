@@ -1,0 +1,58 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "video-clipper"
+version = "0.1.0"
+description = "Pipeline local-first para detectar momentos, recortar y subtitular clips a partir de streams y capacitaciones."
+readme = "README.md"
+requires-python = ">=3.11"
+authors = [{ name = "Ale" }]
+
+dependencies = [
+    "typer>=0.12",
+    "rich>=13.7",
+    "pydantic>=2.7",
+    "python-dotenv>=1.0",
+    "numpy>=1.26",
+]
+
+[project.optional-dependencies]
+# Transcripción local (pesado, requiere CUDA). Instalar cuando se vaya a usar ASR real.
+asr = [
+    "faster-whisper>=1.0",
+]
+# Alineación + diarización por palabra de mayor calidad (más pesado que faster-whisper).
+asr-whisperx = [
+    "whisperx>=3.1",
+]
+# Detección de cara para ubicar el tile de la webcam.
+face = [
+    "opencv-python>=4.9",
+    "mediapipe>=0.10",
+]
+# Backends LLM por API para el scoring de momentos.
+llm = [
+    "anthropic>=0.34",
+]
+dev = [
+    "pytest>=8.0",
+    "ruff>=0.5",
+]
+api = [
+    "fastapi>=0.115",
+    "uvicorn[standard]>=0.30",
+    "python-multipart>=0.0.9",
+]
+
+[project.scripts]
+video-clipper = "video_clipper.cli:app"
+video-clipper-serve = "video_clipper.api.main:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"

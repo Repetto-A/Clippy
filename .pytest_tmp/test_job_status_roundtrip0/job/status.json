@@ -1,0 +1,10 @@
+{
+  "source": "C:\\Users\\conta\\Documents\\Ale\\Software\\Current Projects\\video_clipper\\.pytest_tmp\\test_job_status_roundtrip0\\video.mp4",
+  "stage": "failed",
+  "progress": 0.0,
+  "message": "Error en el procesamiento",
+  "error": "boom",
+  "started_at": "2026-06-19T19:43:49.572964+00:00",
+  "updated_at": "2026-06-19T19:43:49.577100+00:00",
+  "clip_count": null
+}

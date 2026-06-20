@@ -1,0 +1,28 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.eggs/
+build/
+dist/
+.venv/
+venv/
+.env
+
+# Datos de trabajo y media (no versionar crudos ni outputs)
+work/
+workdir/
+_analysis/
+*.mp4
+*.wav
+*.mkv
+*.mov
+
+# Herramientas
+.pytest_cache/
+.ruff_cache/
+.idea/
+.vscode/
+
+# Virtualenv del proyecto (ASR)
+.venv-asr/
