@@ -56,3 +56,9 @@ where = ["src"]
 [tool.ruff]
 line-length = 100
 target-version = "py311"
+
+[tool.pytest.ini_options]
+# Windows: el temp por defecto (AppData\Local\Temp) puede dar PermissionError;
+# usamos un basetemp local al repo (ignorado por git).
+addopts = "--basetemp=.pytest_tmp"
+testpaths = ["tests"]

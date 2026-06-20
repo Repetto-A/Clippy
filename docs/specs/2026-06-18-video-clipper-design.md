@@ -1,99 +1,99 @@
-# Video Clipper — Spec de Diseño
+# Video Clipper — Design Spec
 
-- **Fecha:** 2026-06-18
-- **Estado:** Aprobado para escribir plan de implementación
-- **Autor:** Ale (+ asistente)
+- **Date:** 2026-06-18
+- **Status:** Approved for writing implementation plan
+- **Author:** Ale (+ assistant)
 
-## 1. Contexto y objetivo
+## 1. Context and goal
 
-Generar contenido corto a partir de los crudos de streams y capacitaciones que da Ale.
-El sistema debe: analizar el crudo, detectar momentos interesantes, extraer clips de esos
-momentos, reencuadrarlos a vertical (y horizontal) y subtitularlos automáticamente.
-Referencia conceptual: Opus Clip, pero adaptado a contenido educativo en español con
-layout slide + webcam.
+Generate short-form content from the raw recordings of Ale's streams and training sessions.
+The system must: analyze the raw video, detect interesting moments, extract clips from those
+moments, reframe them to vertical (and horizontal), and subtitle them automatically.
+Conceptual reference: Opus Clip, but adapted to Spanish educational content with a slide +
+webcam layout.
 
-Objetivo del MVP: validar la idea sobre **una clase real** con calidad suficiente para
-publicar, manteniendo control total, costo casi nulo y privacidad.
+MVP goal: validate the idea on **one real class** with quality good enough to publish, while
+keeping full control, near-zero cost, and privacy.
 
-## 2. Material real (hallazgos del crudo de muestra)
+## 2. Real material (findings from the sample recording)
 
-Analizado: `Formación Inicial en inteligencia artificial - Grupo 1 - 2026_06_08.mp4`.
+Analyzed: `Formación Inicial en inteligencia artificial - Grupo 1 - 2026_06_08.mp4`.
 
-- 1920x1080, 24 fps, H.264 + audio AAC 48kHz estéreo. Duración ~93 min (~5580 s).
-- Es una **grabación de Google Meet**:
-  - La **webcam es un recuadro chico** ubicado a la derecha (no cámara a pantalla completa).
-    Su posición **varía** entre momentos (a veces arriba-derecha, a veces centro-derecha)
-    → no se puede hardcodear un crop fijo; hay que **detectar el tile** (cara).
-  - La **pantalla compartida (slides)** ocupa el centro-izquierda y es el contenido valioso
-    (slides densas: treemaps, gráficos de LLMs, etc.).
-- Hay **momentos "sucios"** donde la pantalla muestra la UI de Meet, pestañas del navegador
-  o NotebookLM → no sirven como clip y deben descartarse.
-- Entorno: **NVIDIA RTX 5060 Laptop** disponible → procesamiento local viable (WhisperX + NVENC).
-- `ffmpeg` instalado es build completo (NVENC, libass, whisper).
+- 1920x1080, 24 fps, H.264 + AAC 48kHz stereo audio. Duration ~93 min (~5580 s).
+- It's a **Google Meet recording**:
+  - The **webcam is a small tile** on the right (not a full-screen camera). Its position
+    **varies** between moments (sometimes top-right, sometimes center-right) → a fixed crop
+    can't be hardcoded; the **tile (face) must be detected**.
+  - The **shared screen (slides)** occupies the center-left and is the valuable content
+    (dense slides: treemaps, LLM charts, etc.).
+- There are **"dirty" moments** where the screen shows the Meet UI, browser tabs, or
+  NotebookLM → not usable as clips and must be discarded.
+- Environment: **NVIDIA RTX 5060 Laptop** available → local processing is viable (WhisperX +
+  NVENC).
+- The installed `ffmpeg` is a full build (NVENC, libass, whisper).
 
-Mockup de layout apilado generado a partir de un frame real:
-`_analysis/frames/mockup_stacked.jpg`.
+Stacked-layout mockup generated from a real frame: `_analysis/frames/mockup_stacked.jpg`.
 
-## 3. Alcance
+## 3. Scope
 
-### MVP (en orden)
-1. Ingesta de un `.mp4` y extracción de audio.
-2. Transcripción local con timestamps por palabra + diarización.
-3. Señales locales (silencios, energía, escenas, detección de "pantalla sucia").
-4. Detección/scoring de momentos vía `TaskRouter` (MVP: un solo modelo; fallback heurístico).
-5. Ajuste de cortes a límites de frase/silencio.
-6. Revisión humana por **CLI** (listar candidatos, aprobar/ajustar).
-7. Reencuadre 9:16 **apilado (Layout A)** con **Layout B automático** cuando la slide es central;
-   export también en 16:9.
-8. Subtítulos ASS karaoke en español (pista EN opcional por traducción).
-9. Render con ffmpeg + NVENC.
+### MVP (in order)
+1. Ingest an `.mp4` and extract audio.
+2. Local transcription with word-level timestamps + diarization.
+3. Local signals (silences, energy, scenes, "dirty screen" detection).
+4. Moment detection/scoring via `TaskRouter` (MVP: a single model; heuristic fallback).
+5. Cut adjustment to sentence/silence boundaries.
+6. Human review via **CLI** (list candidates, approve/adjust).
+7. 9:16 **stacked (Layout A)** reframe with automatic **Layout B** when the slide is central;
+   also export 16:9.
+8. Spanish ASS karaoke subtitles (optional EN track via translation).
+9. Render with ffmpeg + NVENC.
 
-### No-objetivos del MVP (roadmap posterior)
-- UI web de revisión (MVP usa CLI).
-- Best-of-breed multi-modelo real (la arquitectura lo soporta; el MVP usa un modelo).
-- B-roll, música de fondo, publicación/scheduling automático en redes.
-- Soporte multi-speaker complejo / split-screen de varias personas.
+### MVP non-goals (later roadmap)
+- Web review UI (MVP uses CLI).
+- True best-of-breed multi-model (the architecture supports it; the MVP uses one model).
+- B-roll, background music, automatic publishing/scheduling to social.
+- Complex multi-speaker support / split-screen of several people.
 
-## 4. Decisiones de diseño (acordadas)
+## 4. Design decisions (agreed)
 
-| Decisión | Elección |
+| Decision | Choice |
 |---|---|
-| Enfoque | Híbrido local-first (todo local salvo el scoring por LLM) |
-| Cerebro de detección | `TaskRouter` (tareas→modelos) configurable. MVP: Claude en todas las tareas + fallback heurístico local |
-| Proveedor LLM default | Claude Sonnet (configurable por env var). Sin keys aún → fallback heurístico para testear |
-| Privacidad | Contenido rara vez confidencial; se permite mandar texto a la API. Opción local futura |
-| Layout vertical | A (apilado) default; B (pantalla protagonista) automático cuando la slide es central |
-| Formatos de salida | 9:16 y 16:9 |
-| Idiomas | ES siempre; EN opcional (traducción) |
-| Revisión | Human-in-the-loop (CLI en MVP) |
-| Arranque | MVP sobre una clase real, iterar |
+| Approach | Local-first hybrid (everything local except LLM scoring) |
+| Detection brain | Configurable `TaskRouter` (tasks→models). MVP: Claude on all tasks + local heuristic fallback |
+| Default LLM provider | Claude Sonnet (configurable via env var). No keys yet → heuristic fallback for testing |
+| Privacy | Content is rarely confidential; sending text to the API is allowed. Local option in the future |
+| Vertical layout | A (stacked) default; B (screen-focus) automatic when the slide is central |
+| Output formats | 9:16 and 16:9 |
+| Languages | ES always; EN optional (translation) |
+| Review | Human-in-the-loop (CLI in the MVP) |
+| Start | MVP on one real class, then iterate |
 
-## 5. Arquitectura general
+## 5. Overall architecture
 
 ```mermaid
 flowchart TD
-    A["Crudo .mp4"] --> B["Ingesta + extraccion de audio"]
-    B --> C["Transcripcion WhisperX (GPU): words + diarizacion"]
-    C --> D["Senales locales: silencios, energia, escenas, pantalla sucia"]
-    D --> E["TaskRouter: scan -> rank -> titulos (LLM o heuristico)"]
-    E --> F["Seleccion + ajuste de cortes a frase/silencio"]
-    F --> G["Revision humana (CLI): aprobar / ajustar"]
-    G --> H["Reencuadre 9:16 (deteccion de cara, layout A/B) + 16:9"]
-    H --> I["Subtitulos ASS karaoke (ES, EN opcional)"]
+    A["Raw .mp4"] --> B["Ingest + audio extraction"]
+    B --> C["WhisperX transcription (GPU): words + diarization"]
+    C --> D["Local signals: silences, energy, scenes, dirty screen"]
+    D --> E["TaskRouter: scan -> rank -> titles (LLM or heuristic)"]
+    E --> F["Selection + cut adjustment to sentence/silence"]
+    F --> G["Human review (CLI): approve / adjust"]
+    G --> H["9:16 reframe (face detection, layout A/B) + 16:9"]
+    H --> I["ASS karaoke subtitles (ES, EN optional)"]
     I --> J["Render ffmpeg + NVENC"]
-    J --> K["Clips finales + metadata"]
+    J --> K["Final clips + metadata"]
 ```
 
-Principio: cada etapa es un módulo con una responsabilidad clara, interfaz definida y
-testeable de forma aislada. Los datos fluyen como artefactos en disco (JSON + media
-intermedia) para poder re-correr etapas sin rehacer todo.
+Principle: each stage is a module with a clear responsibility, a defined interface, and
+isolated testability. Data flows as artifacts on disk (JSON + intermediate media) so stages
+can be re-run without redoing everything.
 
-## 6. Componentes e interfaces
+## 6. Components and interfaces
 
-Sketches en Python (no definitivos, orientativos):
+Python sketches (orientative, not final):
 
 ```python
-# Modelo de datos central
+# Central data model
 @dataclass
 class Word:
     text: str
@@ -107,7 +107,7 @@ class ClipCandidate:
     start: float
     end: float
     score: float            # 0-100
-    reason: str             # por que es clipeable
+    reason: str             # why it's clippable
     title: str
     hook: str
     transcript: str
@@ -123,14 +123,14 @@ class SignalExtractor(Protocol):
     def extract(self, video_path: str, words: list[Word]) -> Signals: ...
 
 class TaskRouter(Protocol):
-    # tareas nombradas: "scan" | "rank" | "titles" | "translate" | "visual_check"
+    # named tasks: "scan" | "rank" | "titles" | "translate" | "visual_check"
     def run(self, task: str, payload: dict) -> dict: ...
 
 class MomentScorer(Protocol):
     def propose(self, words: list[Word], signals: Signals) -> list[ClipCandidate]: ...
 
 class Reframer(Protocol):
-    def reframe(self, video: str, clip: ClipCandidate) -> str: ...  # devuelve path 9:16
+    def reframe(self, video: str, clip: ClipCandidate) -> str: ...  # returns 9:16 path
 
 class Captioner(Protocol):
     def build_ass(self, words: list[Word], clip: ClipCandidate, lang: str) -> str: ...
@@ -139,57 +139,57 @@ class Renderer(Protocol):
     def render(self, video: str, clip: ClipCandidate, ass_path: str) -> str: ...
 ```
 
-### Implementaciones MVP
+### MVP implementations
 - `WhisperXTranscriber` (local, GPU).
-- `LocalSignalExtractor` (ffmpeg/librosa + detección de pantalla sucia por heurística visual).
-- `LLMRouter` con backend Claude; `HeuristicRouter`/`HeuristicScorer` de fallback sin API.
-- `StackedReframer` (layouts A/B + detección de cara para ubicar el tile webcam).
-- `AssCaptioner` (karaoke ES; EN vía task "translate").
+- `LocalSignalExtractor` (ffmpeg/librosa + dirty-screen detection via visual heuristic).
+- `LLMRouter` with a Claude backend; `HeuristicRouter`/`HeuristicScorer` as the no-API fallback.
+- `StackedReframer` (layouts A/B + face detection to locate the webcam tile).
+- `AssCaptioner` (ES karaoke; EN via the "translate" task).
 - `NvencRenderer`.
 
-## 7. Flujo de datos y artefactos
+## 7. Data flow and artifacts
 
-Por cada crudo se crea un workdir:
+A workdir is created per raw video:
 
 ```
-workdir/<clase>/
+workdir/<class>/
   audio.wav
-  transcript.json          # list[Word] + diarizacion
-  signals.json             # silencios, energia, escenas, segmentos "sucios"
-  candidates.json          # list[ClipCandidate] (estado de revision)
+  transcript.json          # list[Word] + diarization
+  signals.json             # silences, energy, scenes, "dirty" segments
+  candidates.json          # list[ClipCandidate] (review state)
   clips/
-    <clip_id>.ass          # subtitulos
+    <clip_id>.ass          # subtitles
     <clip_id>_9x16.mp4
     <clip_id>_16x9.mp4
 ```
 
-Cada etapa lee/escribe estos artefactos → re-ejecución incremental por etapa.
+Each stage reads/writes these artifacts → incremental re-execution per stage.
 
-## 8. Lógica de layout vertical (A vs B automático)
+## 8. Vertical layout logic (A vs automatic B)
 
-- **A (apilado):** slide arriba, webcam al medio, subtítulos abajo. Default.
-- **B (pantalla protagonista):** slide casi full, webcam chica en esquina. Se elige cuando
-  el momento es predominantemente visual / la slide es el centro de atención.
-- Heurística de selección A/B (MVP, refinable):
-  - Si en el rango del clip hay densidad alta de contenido en pantalla (mucho texto/gráfico
-    detectado) y poca referencia a "mirame a mí" → **B**.
-  - Si es explicación hablada / la cara es lo central → **A**.
-  - Señal multimodal futura (task `visual_check`) puede mejorar esta decisión.
-- Si el rango cae sobre un segmento "sucio", se recorta o descarta ese tramo.
+- **A (stacked):** slide on top, webcam in the middle, subtitles at the bottom. Default.
+- **B (screen-focus):** slide near full, small webcam in a corner. Chosen when the moment is
+  predominantly visual / the slide is the center of attention.
+- A/B selection heuristic (MVP, refinable):
+  - If the clip range has high on-screen content density (lots of detected text/graphics) and
+    little "look at me" reference → **B**.
+  - If it's spoken explanation / the face is central → **A**.
+  - A future multimodal signal (task `visual_check`) can improve this decision.
+- If the range falls on a "dirty" segment, that stretch is trimmed or discarded.
 
-## 9. Stack y dependencias
+## 9. Stack and dependencies
 
-- **Lenguaje:** Python 3.11+.
-- **ASR:** WhisperX (large-v3) sobre CUDA.
-- **Audio/señales:** ffmpeg, librosa/numpy.
-- **Detección de cara:** MediaPipe o YOLO-face (ubicar tile de webcam).
-- **LLM:** SDK del proveedor (Anthropic por default), detrás del `TaskRouter`.
-- **Subtítulos:** generación ASS propia (karaoke) + libass (ffmpeg).
-- **Render:** ffmpeg con `h264_nvenc`.
-- **CLI:** Typer o argparse.
-- **Gestión de entorno:** `requirements.txt` (o `uv`/`pyproject`), config por `.env`.
+- **Language:** Python 3.11+.
+- **ASR:** WhisperX (large-v3) on CUDA.
+- **Audio/signals:** ffmpeg, librosa/numpy.
+- **Face detection:** MediaPipe or YOLO-face (to locate the webcam tile).
+- **LLM:** provider SDK (Anthropic by default), behind the `TaskRouter`.
+- **Subtitles:** custom ASS generation (karaoke) + libass (ffmpeg).
+- **Render:** ffmpeg with `h264_nvenc`.
+- **CLI:** Typer or argparse.
+- **Environment management:** `requirements.txt` (or `uv`/`pyproject`), config via `.env`.
 
-## 10. Estructura del proyecto (propuesta)
+## 10. Project structure (proposed)
 
 ```
 video_clipper/
@@ -197,14 +197,14 @@ video_clipper/
     ingest.py
     transcribe.py
     signals.py
-    router.py            # TaskRouter + backends (LLM, heuristico)
+    router.py            # TaskRouter + backends (LLM, heuristic)
     scoring.py           # MomentScorer
-    selection.py         # ajuste de cortes
-    review.py            # CLI de revision humana
-    reframe.py           # layouts A/B + deteccion de cara
-    captions.py          # ASS karaoke + traduccion
+    selection.py         # cut adjustment
+    review.py            # human-review CLI
+    reframe.py           # layouts A/B + face detection
+    captions.py          # ASS karaoke + translation
     render.py            # NVENC
-    pipeline.py          # orquestacion
+    pipeline.py          # orchestration
     models.py            # dataclasses
     config.py
   docs/specs/
@@ -213,39 +213,39 @@ video_clipper/
   README.md
 ```
 
-## 11. Manejo de errores y casos borde
+## 11. Error handling and edge cases
 
-- Crudo sin/poca voz en un tramo → no genera candidatos ahí.
-- Sin API key → usar `HeuristicScorer` y avisar por log.
-- Webcam no detectable en un frame → fallback a última posición conocida o a Layout B.
-- Tramo "sucio" dentro de un clip aprobado → recortar el subtramo o marcar warning.
-- Cortes que partirían una palabra → snap al límite de frase/silencio más cercano.
-- Falla de NVENC → fallback a encoder CPU (`libx264`).
+- Raw video with no/little voice in a stretch → no candidates generated there.
+- No API key → use `HeuristicScorer` and warn in the log.
+- Webcam undetectable in a frame → fall back to the last known position or to Layout B.
+- "Dirty" stretch inside an approved clip → trim the sub-range or flag a warning.
+- Cuts that would split a word → snap to the nearest sentence/silence boundary.
+- NVENC failure → fall back to the CPU encoder (`libx264`).
 
 ## 12. Testing
 
-- Unit: parsing de transcript, ajuste de cortes (snap a frases), generación de ASS,
-  selección de layout A/B (con fixtures de señales).
-- Integración: pipeline sobre un fragmento corto (~5 min) extraído de la clase real.
-- Validación manual: revisar visualmente N clips del crudo real (criterio de aceptación
-  del MVP).
-- Golden frames: el mockup de layout sirve como referencia visual.
+- Unit: transcript parsing, cut adjustment (snap to sentences), ASS generation, A/B layout
+  selection (with signal fixtures).
+- Integration: pipeline over a short fragment (~5 min) extracted from the real class.
+- Manual validation: visually review N clips from the real recording (MVP acceptance
+  criterion).
+- Golden frames: the layout mockup serves as a visual reference.
 
-## 13. Roadmap post-MVP
+## 13. Post-MVP roadmap
 
-- Best-of-breed real en el `TaskRouter` (Gemini Flash para `scan`, Claude para `rank`,
-  patrón filtro→refinamiento).
-- UI web local de revisión (FastAPI + front) con preview y edición de subtítulos.
-- `visual_check` multimodal para mejorar A/B y descarte de pantalla sucia.
-- B-roll, música, branding, export/scheduling a redes.
-- Scorer LLM local para casos confidenciales.
+- True best-of-breed in the `TaskRouter` (Gemini Flash for `scan`, Claude for `rank`,
+  filter→refine pattern).
+- Local web review UI (FastAPI + front end) with preview and subtitle editing.
+- Multimodal `visual_check` to improve A/B and dirty-screen rejection.
+- B-roll, music, branding, export/scheduling to social.
+- Local LLM scorer for confidential cases.
 
-## 14. Riesgos y preguntas abiertas
+## 14. Risks and open questions
 
-- **Calidad de la detección de momentos** sin API (fallback heurístico) será limitada;
-  el valor real aparece con LLM → conseguir una API key es prioridad temprana.
-- **VRAM (~8GB):** correr WhisperX y un LLM local en simultáneo no entra → si se usa LLM
-  local, ejecutar secuencial.
-- **Detección del tile de webcam** ante posición variable: validar robustez sobre varios frames.
-- **Heurística A/B:** punto a iterar con feedback real.
+- **Moment-detection quality** without an API (heuristic fallback) will be limited; the real
+  value appears with an LLM → getting an API key is an early priority.
+- **VRAM (~8GB):** running WhisperX and a local LLM simultaneously doesn't fit → if a local
+  LLM is used, run sequentially.
+- **Webcam tile detection** with a varying position: validate robustness across several frames.
+- **A/B heuristic:** a point to iterate with real feedback.
 ```
