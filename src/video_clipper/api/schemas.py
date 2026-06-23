@@ -6,7 +6,7 @@ from pathlib import Path
 
 from pydantic import BaseModel, Field
 
-from ..models import ClipCandidate, ClipStatus, JobStage, JobStatusRecord, Word
+from ..models import ClipCandidate, ClipStatus, JobStage, JobStatusRecord, RejectionReason, Word
 
 
 class JobSummary(BaseModel):
@@ -35,9 +35,25 @@ class ClipPatch(BaseModel):
     start: float | None = None
     end: float | None = None
     status: ClipStatus | None = None
+    rejection_reason: RejectionReason | None = None
     title: str | None = None
     layout: str | None = None
     words: list[Word] | None = None
+
+
+class GoldenSummary(BaseModel):
+    approved: int
+    rejected: int
+    total: int
+
+
+class EvalReportResponse(BaseModel):
+    n: int
+    matched: int = 0
+    precision_at_n: float = 0.0
+    recall: float = 0.0
+    false_positives_by_reason: dict[str, int] = Field(default_factory=dict)
+    has_baseline: bool = False
 
 
 class WordPatch(BaseModel):

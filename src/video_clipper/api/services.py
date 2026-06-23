@@ -9,7 +9,8 @@ from urllib.parse import unquote
 from .. import job_status, storage
 from ..clip_utils import clamp_range, sync_clip_words
 from ..config import settings
-from ..models import ClipStatus, JobStage, Layout
+from ..models import ClipStatus, JobStage, Layout, RejectionReason
+from ..review import record_golden
 from ..pipeline import run_all, stage_render
 
 _lock = threading.Lock()
@@ -140,6 +141,10 @@ def patch_clip(job_id: str, clip_id: str, patch) -> object | None:
 
     if patch.status is not None:
         target.status = patch.status
+        if patch.status is ClipStatus.REJECTED and patch.rejection_reason is not None:
+            target.rejection_reason = patch.rejection_reason
+        if patch.status in (ClipStatus.APPROVED, ClipStatus.REJECTED):
+            record_golden(wd, cset.source, target, patch.status, patch.rejection_reason)
     if patch.title is not None:
         target.title = patch.title
     if patch.layout is not None:
@@ -201,3 +206,26 @@ def clip_output_path(job_id: str, clip_id: str, fmt: str) -> Path | None:
         p = Path(path_str)
         return p if p.is_file() else None
     return None
+
+
+def run_job_eval(job_id: str):
+    from ..config import settings
+    from ..eval import run_eval
+
+    wd = workdir_for(job_id)
+    if not (wd / "candidates.json").exists():
+        return None
+    return run_eval(wd, n=settings.target_clips, iou_threshold=settings.eval_iou_threshold)
+
+
+def get_eval_report(job_id: str):
+    wd = workdir_for(job_id)
+    return storage.load_eval_report(wd)
+
+
+def get_golden_summary(job_id: str) -> dict:
+    wd = workdir_for(job_id)
+    gs = storage.load_golden(wd)
+    approved = len(gs.approved())
+    rejected = len(gs.rejected())
+    return {"approved": approved, "rejected": rejected, "total": approved + rejected}

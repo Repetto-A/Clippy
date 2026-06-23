@@ -63,6 +63,15 @@ def save_eval_report(r: EvalReport, workdir: Path) -> Path:
     return p
 
 
+def load_eval_report(workdir: Path):
+    from .eval import EvalReport
+
+    p = workdir / "eval_report.json"
+    if not p.exists():
+        return None
+    return EvalReport.model_validate_json(p.read_text(encoding="utf-8"))
+
+
 def save_job_status(j: JobStatusRecord, workdir: Path) -> Path:
     p = workdir / "status.json"
     p.write_text(j.model_dump_json(indent=2), encoding="utf-8")

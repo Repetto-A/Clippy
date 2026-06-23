@@ -60,7 +60,7 @@ def stage_ingest(source: Path, *, track: bool = True) -> Path:
 
     if track:
 
-        job_status.set_status(workdir, stage=JobStage.INGESTING, progress=5, message="Validando y extrayendo audio…")
+        job_status.set_status(workdir, stage=JobStage.INGESTING, progress=5, message="Validando y extrayendo audio...")
 
     info, _ = ingest(source, workdir)
 
@@ -84,7 +84,7 @@ def stage_transcribe(source: Path, *, track: bool = True) -> None:
 
         job_status.set_status(
 
-            workdir, stage=JobStage.TRANSCRIBING, progress=15, message="Transcribiendo (puede tardar varios minutos)…",
+            workdir, stage=JobStage.TRANSCRIBING, progress=15, message="Transcribiendo (puede tardar varios minutos)...",
 
         )
 
@@ -112,7 +112,7 @@ def stage_signals(source: Path, *, track: bool = True) -> None:
 
     if track:
 
-        job_status.set_status(workdir, stage=JobStage.SIGNALS, progress=60, message="Extrayendo señales locales…")
+        job_status.set_status(workdir, stage=JobStage.SIGNALS, progress=60, message="Extrayendo senales locales...")
 
     dur_file = workdir / "duration.txt"
 
@@ -136,7 +136,7 @@ def stage_propose(source: Path, *, track: bool = True) -> None:
 
     if track:
 
-        job_status.set_status(workdir, stage=JobStage.PROPOSING, progress=75, message="Detectando momentos…")
+        job_status.set_status(workdir, stage=JobStage.PROPOSING, progress=75, message="Detectando momentos...")
 
     transcript = storage.load_transcript(workdir)
 
@@ -208,7 +208,7 @@ def stage_render(source: Path, only_approved: bool = True, *, track: bool = True
 
         job_status.set_status(
 
-            workdir, stage=JobStage.RENDERING, progress=0, message=f"Renderizando {len(targets)} clips…",
+            workdir, stage=JobStage.RENDERING, progress=0, message=f"Renderizando {len(targets)} clips...",
 
         )
 
@@ -250,9 +250,12 @@ def stage_render(source: Path, only_approved: bool = True, *, track: bool = True
 
 
 
-def run_all(source: Path, auto_approve: bool = False, *, track: bool = True, init: bool = True) -> None:
+def run_all(source: Path, auto_approve: bool = False, *, track: bool = True, init: bool = True, resume: bool = True) -> None:
 
-    """Pipeline completo hasta proponer. El render queda tras la revisión humana."""
+    """Pipeline completo hasta proponer. El render queda tras la revision humana.
+
+    Con resume=True (default) salta etapas cuyos artefactos ya existen en el workdir.
+    """
 
     workdir = _workdir(source)
 
@@ -260,15 +263,37 @@ def run_all(source: Path, auto_approve: bool = False, *, track: bool = True, ini
 
         job_status.init(workdir, source)
 
+    def _exists(name: str) -> bool:
+        return (workdir / name).is_file()
+
     try:
 
-        stage_ingest(source, track=track)
+        if not resume or not _exists("audio.wav"):
+            stage_ingest(source, track=track)
+        elif track:
+            job_status.set_status(workdir, progress=10, message="Audio ya extraido (resume)")
 
-        stage_transcribe(source, track=track)
+        if not resume or not _exists("transcript.json"):
+            stage_transcribe(source, track=track)
+        elif track:
+            job_status.set_status(workdir, progress=55, message="Transcripcion lista (resume)")
 
-        stage_signals(source, track=track)
+        if not resume or not _exists("signals.json"):
+            stage_signals(source, track=track)
+        elif track:
+            job_status.set_status(workdir, progress=70, message="Senales listas (resume)")
 
-        stage_propose(source, track=track)
+        if not resume or not _exists("candidates.json"):
+            stage_propose(source, track=track)
+        elif track:
+            cset = storage.load_candidates(workdir)
+            job_status.set_status(
+                workdir,
+                stage=JobStage.READY_FOR_REVIEW,
+                progress=100,
+                message=f"{len(cset.candidates)} clips listos (resume)",
+                clip_count=len(cset.candidates),
+            )
 
         if auto_approve:
 

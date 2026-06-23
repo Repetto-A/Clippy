@@ -104,7 +104,28 @@ button.ghost { background: transparent; }
 .stage-working { color: var(--warn); }
 
 .job-header { margin-bottom: 1.5rem; }
-.job-actions { display: flex; gap: 0.5rem; flex-wrap: wrap; margin-top: 0.75rem; }
+.job-actions { display: flex; gap: 0.5rem; flex-wrap: wrap; margin-top: 0.75rem; align-items: center; }
+
+.eval-section {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 1rem 1.25rem;
+  margin-bottom: 1.5rem;
+}
+.eval-section h2 { margin: 0 0 0.5rem; font-size: 1rem; }
+.eval-stats { margin: 0; }
+
+.reject-reason {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  color: var(--text);
+  padding: 0.45rem 0.5rem;
+  font: inherit;
+  font-size: 0.85rem;
+  max-width: 11rem;
+}
 .meta { color: var(--muted); margin: 0.5rem 0 0; }
 
 .renders-list { display: flex; flex-direction: column; gap: 0.75rem; margin-bottom: 2rem; }

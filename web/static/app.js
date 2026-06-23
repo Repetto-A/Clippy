@@ -172,9 +172,33 @@ async function refreshJob() {
     const data = await api(`/jobs/${enc(state.jobId)}/candidates`);
     renderClips(data.candidates);
     renderOutputs(data.candidates);
+    await refreshEval();
   } catch {
     $("clips-list").innerHTML = `<p class="meta">Clips aún no disponibles.</p>`;
     $("renders-section").classList.add("hidden");
+    $("eval-section").classList.add("hidden");
+  }
+}
+
+async function refreshEval() {
+  const section = $("eval-section");
+  try {
+    const [golden, evalRep] = await Promise.all([
+      api(`/jobs/${enc(state.jobId)}/golden`),
+      api(`/jobs/${enc(state.jobId)}/eval`),
+    ]);
+    section.classList.remove("hidden");
+    $("eval-hint").classList.toggle("hidden", golden.total > 0);
+    const pct = Math.round((evalRep.precision_at_n || 0) * 100);
+    const recall = Math.round((evalRep.recall || 0) * 100);
+    $("eval-stats").innerHTML = golden.total
+      ? `Golden set: ${golden.approved} aprobados, ${golden.rejected} rechazados`
+        + (evalRep.n
+          ? ` · precision@${evalRep.n}: ${pct}% · recall: ${recall}%`
+          : " · corré Evaluar para medir")
+      : "Sin etiquetas todavía. Aproba/rechaza clips en el editor.";
+  } catch {
+    section.classList.add("hidden");
   }
 }
 
@@ -591,15 +615,25 @@ async function saveRange() {
 }
 
 async function setClipStatus(status) {
+  const body = { status };
+  if (status === "rejected") {
+    const reason = $("reject-reason").value;
+    if (!reason) {
+      toast("Elegí una razón de rechazo");
+      return;
+    }
+    body.rejection_reason = reason;
+  }
   const clip = await api(`/jobs/${enc(state.jobId)}/clips/${state.clip.id}`, {
     method: "PATCH",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ status }),
+    body: JSON.stringify(body),
   });
   state.clip = clip;
   $("editor-clip-meta").textContent =
     `${fmtTime(clip.start)} – ${fmtTime(clip.end)} · ${Math.round(clip.end - clip.start)}s · ${clip.status}`;
   toast(status === "approved" ? "Aprobado" : "Rechazado");
+  await refreshEval();
 }
 
 function renderWords(words) {
@@ -674,6 +708,16 @@ $("btn-render").onclick = async () => {
   toast("Render iniciado");
   startPoll();
   setTimeout(refreshJob, 2000);
+};
+
+$("btn-run-eval").onclick = async () => {
+  try {
+    const rep = await api(`/jobs/${enc(state.jobId)}/eval`, { method: "POST" });
+    toast(`precision@${rep.n}: ${Math.round(rep.precision_at_n * 100)}%`);
+    await refreshEval();
+  } catch (e) {
+    toast(e.message);
+  }
 };
 
 const dropzone = $("dropzone");

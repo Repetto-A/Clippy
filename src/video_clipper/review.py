@@ -77,6 +77,11 @@ def set_status(
     console.print(f"[red]No se encontró el clip {clip_id}[/]")
 
 
+def record_golden(workdir: Path, source: str, clip, status: ClipStatus, reason: RejectionReason | None) -> None:
+    """Persist approve/reject judgment into labels.json (golden set)."""
+    _record_golden(workdir, source, clip, status, reason)
+
+
 def _record_golden(workdir, source, clip, status, reason) -> None:
     """Persist the human judgment of a clip into the golden set (labels.json).
 

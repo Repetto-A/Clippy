@@ -20,6 +20,7 @@ _analysis/
 
 # Herramientas
 .pytest_cache/
+.pytest_tmp/
 .ruff_cache/
 .idea/
 .vscode/

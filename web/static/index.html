@@ -30,9 +30,15 @@
       <div id="job-meta" class="meta"></div>
       <div class="job-actions">
         <button id="btn-render" class="primary" type="button">Renderizar aprobados</button>
+        <button id="btn-run-eval" class="ghost" type="button">Evaluar calidad</button>
         <button id="btn-retry" class="ghost hidden" type="button">Reintentar procesamiento</button>
       </div>
     </div>
+    <section id="eval-section" class="eval-section hidden">
+      <h2>Evaluacion (M1)</h2>
+      <div id="eval-stats" class="eval-stats meta"></div>
+      <p id="eval-hint" class="hint">Aproba o rechaza clips con razon para construir el golden set.</p>
+    </section>
     <section id="renders-section" class="hidden">
       <h2>Clips renderizados</h2>
       <div id="renders-list" class="renders-list"></div>
@@ -48,6 +54,14 @@
         <p id="editor-clip-meta" class="meta"></p>
       </div>
       <div class="clip-actions">
+        <select id="reject-reason" class="reject-reason" title="Razon si rechazas">
+          <option value="">Razon de rechazo...</option>
+          <option value="bad_hook">Hook debil</option>
+          <option value="not_self_contained">No autocontenido</option>
+          <option value="bad_cut">Corte malo</option>
+          <option value="dirty_screen">Pantalla sucia</option>
+          <option value="weak_topic">Tema debil</option>
+        </select>
         <button id="btn-approve" class="primary" type="button">Aprobar</button>
         <button id="btn-reject" class="danger" type="button">Rechazar</button>
       </div>

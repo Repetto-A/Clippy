@@ -1,8 +1,10 @@
-# Video Clipper
+# Clippy (Video Clipper)
 
 Pipeline local-first (Python) que toma los crudos de tus streams/capacitaciones, detecta
 los momentos más interesantes, recorta los clips, los reencuadra a vertical (9:16) y
 horizontal (16:9), y los subtitula automáticamente con estilo karaoke.
+
+Repositorio: [github.com/Repetto-A/Clippy](https://github.com/Repetto-A/Clippy)
 
 Pensado para grabaciones tipo Google Meet con **slide compartida + webcam**, contenido
 educativo en español, con **revisión humana** antes del render final.
@@ -101,7 +103,26 @@ El transcript se parte en chunks automáticamente para no exceder el contexto de
 VC_LLM_CHUNK_CHARS=12000      # tamaño máximo por chunk
 VC_LLM_CLIPS_PER_CHUNK=6    # clips a pedir por chunk
 VC_TARGET_CLIPS=12          # cupo final tras dedupe
+VC_WHISPER_CHUNK_SECONDS=600  # trozos ASR para videos largos (Windows)
 ```
+
+## Resume del pipeline
+
+`process` y **Reintentar** en la UI saltan etapas cuyos artefactos ya existen
+(`audio.wav`, `transcript.json`, `signals.json`, `candidates.json`). Útil si falló en
+propose tras transcribir una clase larga.
+
+## Evaluación de calidad (M1)
+
+Aprobar/rechazar clips alimenta `labels.json`. Medí precision@N con:
+
+```bash
+python -m video_clipper.cli eval "C:/ruta/al/crudo.mp4"
+```
+
+En la UI: botón **Evaluar calidad** (requiere al menos un approve/reject).
+
+Guía: `docs/M1-baseline.md`. El motor M2 (scan→rank→refine) debe superar ese baseline.
 
 ## Diseño
 

@@ -142,7 +142,7 @@ def status(source: SourceArg) -> None:
 
     if rec is None:
 
-        console.print("[yellow]Sin status.json — todavía no se procesó este video.[/]")
+        console.print("[yellow]Sin status.json - todavia no se proceso este video.[/]")
 
         raise typer.Exit(1)
 
@@ -269,7 +269,7 @@ def render(
 
 @app.command(name="eval")
 def eval_cmd(source: SourceArg) -> None:
-    """Evalúa los candidatos contra el golden set (labels.json) → eval_report.json."""
+    """Evalua los candidatos contra el golden set (labels.json) -> eval_report.json."""
     from .eval import run_eval
 
     workdir = settings.source_workdir(source)

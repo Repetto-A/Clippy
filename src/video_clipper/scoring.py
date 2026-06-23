@@ -105,7 +105,7 @@ class LLMScorer:
             raw = self._score_chunk(chunks[0], transcript, signals, settings.target_clips)
         else:
             console.log(
-                f"[cyan]LLM[/]: transcript largo → {len(chunks)} chunks "
+                f"[cyan]LLM[/]: transcript largo -> {len(chunks)} chunks "
                 f"(~{settings.llm_chunk_chars} chars c/u)"
             )
             raw: list[ClipCandidate] = []

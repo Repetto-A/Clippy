@@ -13,6 +13,8 @@ from . import services
 from .schemas import (
     CandidateSetResponse,
     ClipPatch,
+    EvalReportResponse,
+    GoldenSummary,
     JobDetail,
     JobSummary,
     MessageResponse,
@@ -150,6 +152,34 @@ def retry_job(job_id: str) -> JobSummary:
     if rec is None:
         raise HTTPException(500, "No se pudo reiniciar el job")
     return job_summary(services.decode_job_id(job_id), rec)
+
+
+@app.get("/api/jobs/{job_id}/golden", response_model=GoldenSummary)
+def golden_summary(job_id: str) -> GoldenSummary:
+    return GoldenSummary(**services.get_golden_summary(job_id))
+
+
+@app.get("/api/jobs/{job_id}/eval", response_model=EvalReportResponse)
+def get_eval(job_id: str) -> EvalReportResponse:
+    rep = services.get_eval_report(job_id)
+    golden = services.get_golden_summary(job_id)
+    if rep is None:
+        return EvalReportResponse(n=0, has_baseline=golden["total"] > 0)
+    return EvalReportResponse(**rep.model_dump(), has_baseline=golden["total"] > 0)
+
+
+@app.post("/api/jobs/{job_id}/eval", response_model=EvalReportResponse)
+def run_eval(job_id: str) -> EvalReportResponse:
+    golden = services.get_golden_summary(job_id)
+    if golden["total"] == 0:
+        raise HTTPException(400, "Sin labels.json: aproba/rechaza clips antes de evaluar")
+    try:
+        rep = services.run_job_eval(job_id)
+    except FileNotFoundError:
+        raise HTTPException(404, "Candidatos no disponibles") from None
+    if rep is None:
+        raise HTTPException(404, "No se pudo evaluar")
+    return EvalReportResponse(**rep.model_dump(), has_baseline=True)
 
 
 @app.api_route("/api/jobs/{job_id}/video", methods=["GET", "HEAD"])

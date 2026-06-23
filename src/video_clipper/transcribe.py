@@ -138,7 +138,7 @@ class FasterWhisperTranscriber:
 
         if duration <= chunk_seconds * 1.05:
             if on_progress:
-                on_progress(0.1, "Transcribiendo audio…")
+                on_progress(0.1, "Transcribiendo audio...")
             words, lang = self._transcribe_file(model, audio_path)
             if on_progress:
                 on_progress(1.0, "Transcripción lista")
@@ -153,7 +153,7 @@ class FasterWhisperTranscriber:
             for i, (chunk_path, offset) in enumerate(chunks):
                 pct = (i + 0.5) / len(chunks)
                 if on_progress:
-                    on_progress(pct, f"Transcribiendo trozo {i + 1}/{len(chunks)}…")
+                    on_progress(pct, f"Transcribiendo trozo {i + 1}/{len(chunks)}...")
                 chunk_words, chunk_lang = self._transcribe_file(model, chunk_path)
                 if chunk_lang:
                     lang = chunk_lang
