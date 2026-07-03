@@ -24,6 +24,9 @@ const state = {
   profileBound: false,
   performanceBound: false,
   gridBound: false,
+  clipsToolbarBound: false,
+  clipFilter: "all",
+  clipSort: "time",
   timelineZoom: 1,
 };
 
@@ -43,6 +46,22 @@ function fmtTimePrecise(sec) {
   return `${m}:${s}`;
 }
 
+const _pctFmt = new Intl.NumberFormat(undefined, {
+  style: "percent",
+  maximumFractionDigits: 0,
+});
+const _numFmt = new Intl.NumberFormat(undefined, { maximumFractionDigits: 2 });
+
+function fmtPct(ratio) {
+  return _pctFmt.format(Number.isFinite(ratio) ? ratio : 0);
+}
+
+function fmtNum(value, digits = 2) {
+  const n = Number.isFinite(value) ? value : 0;
+  if (digits === 2) return _numFmt.format(n);
+  return new Intl.NumberFormat(undefined, { maximumFractionDigits: digits }).format(n);
+}
+
 function toast(msg) {
   const el = $("toast");
   el.textContent = msg;
@@ -50,6 +69,22 @@ function toast(msg) {
   const ann = $("status-announcer");
   if (ann) ann.textContent = msg;
   setTimeout(() => el.classList.add("hidden"), 3000);
+}
+
+async function withBusy(btn, busyLabel, fn) {
+  if (!btn) return fn();
+  const prev = btn.textContent;
+  const wasDisabled = btn.disabled;
+  btn.disabled = true;
+  btn.dataset.busy = "true";
+  if (busyLabel) btn.textContent = `${busyLabel}…`;
+  try {
+    return await fn();
+  } finally {
+    btn.disabled = wasDisabled;
+    delete btn.dataset.busy;
+    btn.textContent = prev;
+  }
 }
 
 async function api(path, opts = {}) {
@@ -64,6 +99,47 @@ async function api(path, opts = {}) {
 
 function enc(id) {
   return encodeURIComponent(id);
+}
+
+const FILTERS = ["all", "proposed", "approved", "rejected"];
+const SORTS = ["time", "score"];
+
+function syncUrl({ replace = false } = {}) {
+  if (state.restoringUrl) return;
+  const params = new URLSearchParams();
+  if (state.jobId && state.view !== "inbox") params.set("job", state.jobId);
+  if (state.view === "editor" && state.clip?.id) params.set("clip", state.clip.id);
+  if (state.clipFilter && state.clipFilter !== "all") params.set("filter", state.clipFilter);
+  if (state.clipSort && state.clipSort !== "time") params.set("sort", state.clipSort);
+  const qs = params.toString();
+  const url = qs ? `?${qs}` : location.pathname;
+  history[replace ? "replaceState" : "pushState"]({ view: state.view }, "", url);
+}
+
+async function routeFromUrl() {
+  const params = new URLSearchParams(location.search);
+  const filter = params.get("filter");
+  const sort = params.get("sort");
+  state.clipFilter = FILTERS.includes(filter) ? filter : "all";
+  state.clipSort = SORTS.includes(sort) ? sort : "time";
+  const sortEl = $("clip-sort");
+  if (sortEl) sortEl.value = state.clipSort;
+
+  const job = params.get("job");
+  const clip = params.get("clip");
+  state.restoringUrl = true;
+  try {
+    if (job) {
+      await openJob(job);
+      if (clip) await openEditor(clip);
+    } else {
+      showView("inbox");
+    }
+  } catch {
+    showView("inbox");
+  } finally {
+    state.restoringUrl = false;
+  }
 }
 
 function showView(name) {
@@ -87,18 +163,26 @@ function teardownEditor() {
 
 $("btn-back").onclick = () => {
   if (state.view === "editor") openJob(state.jobId);
-  else showView("inbox");
+  else {
+    showView("inbox");
+    syncUrl();
+  }
 };
+
+window.addEventListener("popstate", () => {
+  routeFromUrl();
+});
 
 async function loadJobs() {
   const jobs = await api("/jobs");
   const list = $("jobs-list");
   if (!jobs.length) {
     list.innerHTML = emptyState(
-      "📂",
+      "inbox",
       "No hay trabajos todavía",
       "Arrastrá un .mp4 a la zona de arriba o hacé click para subir tu primer video.",
     );
+    stopPoll();
     return;
   }
   list.innerHTML = jobs.map((j) => {
@@ -173,9 +257,22 @@ function statusBadgeClass(s) {
   return "badge-proposed";
 }
 
+const ICONS = {
+  inbox: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M3 13h4l2 3h6l2-3h4"/><path d="M5 6h14l2 7v5a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1v-5z"/></svg>',
+  processing: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>',
+  clips: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="M3 9h18M8 5v14"/></svg>',
+  film: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M7 4v16M17 4v16M3 9h4M3 15h4M17 9h4M17 15h4"/></svg>',
+  captions: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="M7 13a2 2 0 1 0 0-2M15 13a2 2 0 1 0 0-2"/></svg>',
+  search: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>',
+};
+
+function iconMarkup(name) {
+  return ICONS[name] || ICONS.clips;
+}
+
 function emptyState(icon, title, desc, { compact = false } = {}) {
   return `<div class="empty-state${compact ? " compact" : ""}">
-    <div class="empty-state-icon" aria-hidden="true">${icon}</div>
+    <div class="empty-state-icon" aria-hidden="true">${iconMarkup(icon)}</div>
     <p class="empty-state-title">${title}</p>
     <p class="empty-state-desc">${desc}</p>
   </div>`;
@@ -252,6 +349,7 @@ function stopPoll() {
 async function openJob(jobId) {
   state.jobId = jobId;
   showView("job");
+  syncUrl();
   await refreshJob();
 }
 
@@ -278,7 +376,7 @@ async function refreshJob() {
         $("clips-list").innerHTML = banner + renderClipsHtml(data.candidates);
       } catch {
         $("clips-list").innerHTML = banner + emptyState(
-          "⏳",
+          "processing",
           "Procesando video",
           `Etapa actual: ${stageLabel(job.stage)} · ${Math.round(job.progress)}% completado.`,
           { compact: true },
@@ -286,7 +384,7 @@ async function refreshJob() {
       }
     } else {
       $("clips-list").innerHTML = banner + emptyState(
-        "⏳",
+        "processing",
         "Procesando video",
         `Etapa actual: ${stageLabel(job.stage)} · ${Math.round(job.progress)}% completado.`,
         { compact: true },
@@ -299,18 +397,22 @@ async function refreshJob() {
     $("timeline-section").classList.add("hidden");
     $("profile-section").classList.add("hidden");
     $("performance-section").classList.add("hidden");
+    $("review-progress").classList.add("hidden");
+    $("clips-toolbar").classList.add("hidden");
     startPoll();
     return;
   }
 
   if (job.stage !== "ready_for_review" && job.stage !== "completed") {
     $("clips-list").innerHTML = emptyState(
-      "⏳",
+      "processing",
       "Todavía procesando",
       `${Math.round(job.progress)}% completado. Los candidatos aparecerán acá cuando estén listos.`,
       { compact: true },
     );
     $("renders-section").classList.add("hidden");
+    $("review-progress").classList.add("hidden");
+    $("clips-toolbar").classList.add("hidden");
     if (ACTIVE.has(job.stage)) startPoll();
     return;
   }
@@ -327,7 +429,7 @@ async function refreshJob() {
     await loadPerformanceReport();
   } catch {
     $("clips-list").innerHTML = emptyState(
-      "📋",
+      "clips",
       "Clips aún no disponibles",
       "El pipeline todavía no terminó de proponer candidatos. Volvé en unos segundos.",
       { compact: true },
@@ -516,7 +618,8 @@ function renderJobTimeline(tl) {
   for (const c of tl.clips || []) {
     const left = (c.start / tl.duration) * 100;
     const width = Math.max(0.4, ((c.end - c.start) / tl.duration) * 100);
-    track += `<button type="button" class="clip-seg" data-id="${escapeAttr(c.id)}" style="left:${left}%;width:${width}%" title="${escapeAttr(c.title || c.id)}"></button>`;
+    const label = `${c.title || c.id} (${fmtTime(c.start)}–${fmtTime(c.end)})`;
+    track += `<button type="button" class="clip-seg" data-id="${escapeAttr(c.id)}" style="left:${left}%;width:${width}%" title="${escapeAttr(c.title || c.id)}" aria-label="${escapeAttr(label)}"></button>`;
   }
   track += "</div>";
   track += `<div class="job-timeline-axis meta">${fmtTime(0)} · ${fmtTime(tl.duration)}</div>`;
@@ -526,7 +629,9 @@ function renderJobTimeline(tl) {
       e.stopPropagation();
       openEditor(btn.dataset.id);
     };
+    btn.onmouseenter = () => selectGridClip(btn.dataset.id, { focus: false });
   });
+  highlightTimelineClip(state.selectedClipId);
   const trackEl = el.querySelector(".job-timeline-track");
   trackEl.onclick = (e) => {
     if (e.target.closest(".clip-seg")) return;
@@ -574,11 +679,11 @@ async function loadPerformanceReport() {
     const lines = [`Muestra: ${report.sample_size} clips`];
     for (const c of report.correlations || []) {
       if (c.correlation != null) {
-        lines.push(`${c.sub_score}: r=${c.correlation.toFixed(2)} (${c.metric})`);
+        lines.push(`${c.sub_score}: r=${fmtNum(c.correlation)} (${c.metric})`);
       }
     }
     for (const s of report.suggestions || []) {
-      lines.push(`Sugerencia ${s.sub_score}: ${s.current} -> ${s.suggested.toFixed(2)} · ${s.reason}`);
+      lines.push(`Sugerencia ${s.sub_score}: ${s.current} -> ${fmtNum(s.suggested)} · ${s.reason}`);
     }
     el.innerHTML = lines.map((line) => `<div>${escapeHtml(line)}</div>`).join("");
   } catch {
@@ -609,11 +714,20 @@ async function importPerformance() {
 function bindPerformanceOnce() {
   if (state.performanceBound) return;
   state.performanceBound = true;
-  $("btn-import-performance").onclick = importPerformance;
+  $("btn-import-performance").onclick = (e) =>
+    withBusy(e.currentTarget, "Importando", importPerformance);
 }
 
 function getSelectedGridClipId() {
-  return state.selectedClipId || state.candidates[0]?.id || null;
+  return state.selectedClipId || visibleClips()[0]?.id || null;
+}
+
+function highlightTimelineClip(clipId) {
+  const el = $("job-timeline");
+  if (!el) return;
+  el.querySelectorAll(".clip-seg").forEach((seg) => {
+    seg.classList.toggle("active", seg.dataset.id === clipId);
+  });
 }
 
 function selectGridClip(clipId, { focus = true } = {}) {
@@ -630,15 +744,17 @@ function selectGridClip(clipId, { focus = true } = {}) {
       el.scrollIntoView({ block: "nearest", behavior: "smooth" });
     }
   });
+  highlightTimelineClip(clipId);
   if (focus && card) card.focus();
 }
 
 function navigateGrid(delta) {
-  if (!state.candidates.length) return;
-  let idx = state.candidates.findIndex((c) => c.id === state.selectedClipId);
+  const clips = visibleClips();
+  if (!clips.length) return;
+  let idx = clips.findIndex((c) => c.id === state.selectedClipId);
   if (idx < 0) idx = delta > 0 ? -1 : 0;
-  idx = (idx + delta + state.candidates.length) % state.candidates.length;
-  selectGridClip(state.candidates[idx].id);
+  idx = (idx + delta + clips.length) % clips.length;
+  selectGridClip(clips[idx].id);
 }
 
 function onGridKeydown(e) {
@@ -691,12 +807,12 @@ async function refreshEval() {
     ]);
     section.classList.remove("hidden");
     $("eval-hint").classList.toggle("hidden", golden.total > 0);
-    const pct = Math.round((evalRep.precision_at_n || 0) * 100);
-    const recall = Math.round((evalRep.recall || 0) * 100);
+    const pct = fmtPct(evalRep.precision_at_n || 0);
+    const recall = fmtPct(evalRep.recall || 0);
     $("eval-stats").innerHTML = golden.total
       ? `Golden set: ${golden.approved} aprobados, ${golden.rejected} rechazados`
         + (evalRep.n
-          ? ` · precisión@${evalRep.n}: ${pct}% · recall: ${recall}%`
+          ? ` · precisión@${evalRep.n}: ${pct} · recall: ${recall}`
           : " · ejecutá Evaluar calidad para medir")
       : "Sin etiquetas todavía. Aprobá o rechazá clips en el editor.";
   } catch {
@@ -820,7 +936,7 @@ $("btn-retry").onclick = async () => {
 function renderClipsHtml(clips) {
   if (!clips.length) {
     return emptyState(
-      "🎬",
+      "film",
       "Sin clips propuestos",
       "El motor no encontró candidatos en este video. Probá Re-proponer clips con otro umbral.",
       { compact: true },
@@ -868,15 +984,94 @@ function bindClipCards(container) {
   });
 }
 
+function clipMatchesFilter(c, filter) {
+  if (filter === "all") return true;
+  if (filter === "approved") return c.status === "approved" || c.status === "edited";
+  if (filter === "rejected") return c.status === "rejected";
+  if (filter === "proposed") return c.status === "proposed";
+  return true;
+}
+
+function visibleClips() {
+  const filtered = state.candidates.filter((c) => clipMatchesFilter(c, state.clipFilter));
+  const sorted = [...filtered];
+  if (state.clipSort === "score") {
+    sorted.sort((a, b) => (b.score || 0) - (a.score || 0));
+  } else {
+    sorted.sort((a, b) => (a.start || 0) - (b.start || 0));
+  }
+  return sorted;
+}
+
+function updateReviewProgress() {
+  const clips = state.candidates;
+  const wrap = $("review-progress");
+  const toolbar = $("clips-toolbar");
+  if (!clips.length) {
+    wrap.classList.add("hidden");
+    toolbar.classList.add("hidden");
+    return;
+  }
+  wrap.classList.remove("hidden");
+  toolbar.classList.remove("hidden");
+  const approved = clips.filter((c) => c.status === "approved" || c.status === "edited").length;
+  const rejected = clips.filter((c) => c.status === "rejected").length;
+  const pending = clips.filter((c) => c.status === "proposed").length;
+  const reviewed = approved + rejected;
+  const pct = clips.length ? Math.round((reviewed / clips.length) * 100) : 0;
+  $("review-progress-label").textContent = `${reviewed} de ${clips.length} revisados`;
+  $("review-progress-counts").textContent =
+    `${approved} aprobados · ${rejected} rechazados · ${pending} pendientes`;
+  $("review-progress-fill").style.width = `${pct}%`;
+  document.querySelectorAll(".filter-chip").forEach((chip) => {
+    const f = chip.dataset.filter;
+    const n = f === "all" ? clips.length : clips.filter((c) => clipMatchesFilter(c, f)).length;
+    const base = { all: "Todos", proposed: "Pendientes", approved: "Aprobados", rejected: "Rechazados" }[f] || f;
+    chip.textContent = `${base} ${n}`;
+    chip.classList.toggle("active", f === state.clipFilter);
+  });
+}
+
 function renderClips(clips) {
   state.candidates = clips;
   const list = $("clips-list");
-  list.innerHTML = renderClipsHtml(clips);
-  bindClipCards(list);
-  if (state.selectedClipId && clips.some((c) => c.id === state.selectedClipId)) {
+  const shown = visibleClips();
+  if (state.candidates.length && !shown.length) {
+    list.innerHTML = emptyState(
+      "search",
+      "Nada en este filtro",
+      "Ningún candidato coincide con el filtro elegido. Probá con otro estado.",
+      { compact: true },
+    );
+  } else {
+    list.innerHTML = renderClipsHtml(shown);
+    bindClipCards(list);
+  }
+  updateReviewProgress();
+  if (state.selectedClipId && shown.some((c) => c.id === state.selectedClipId)) {
     selectGridClip(state.selectedClipId, { focus: false });
   } else {
     state.selectedClipId = null;
+  }
+}
+
+function bindClipsToolbarOnce() {
+  if (state.clipsToolbarBound) return;
+  state.clipsToolbarBound = true;
+  document.querySelectorAll(".filter-chip").forEach((chip) => {
+    chip.addEventListener("click", () => {
+      state.clipFilter = chip.dataset.filter;
+      renderClips(state.candidates);
+      syncUrl({ replace: true });
+    });
+  });
+  const sortEl = $("clip-sort");
+  if (sortEl) {
+    sortEl.addEventListener("change", () => {
+      state.clipSort = sortEl.value;
+      renderClips(state.candidates);
+      syncUrl({ replace: true });
+    });
   }
 }
 
@@ -914,7 +1109,7 @@ function timeFromPct(pct) {
 
 function applyTimelineZoom() {
   $("timeline-inner").style.width = `${state.timelineZoom * 100}%`;
-  $("zoom-label").textContent = `${Math.round(state.timelineZoom * 100)}%`;
+  $("zoom-label").textContent = fmtPct(state.timelineZoom);
 }
 
 function renderRuler() {
@@ -1037,6 +1232,7 @@ async function openEditor(clipId) {
   state.clip = clip;
   state.activeWord = -1;
   showView("editor");
+  syncUrl();
 
   $("editor-clip-title").textContent = clip.title || clip.id;
   $("editor-clip-meta").textContent =
@@ -1295,7 +1491,7 @@ function renderWords(words) {
   const list = $("words-list");
   if (!words.length) {
     list.innerHTML = emptyState(
-      "💬",
+      "captions",
       "Sin subtítulos en este rango",
       "Ajustá el inicio y fin del clip, o esperá a que la transcripción cubra este tramo.",
       { compact: true },
@@ -1363,34 +1559,40 @@ async function saveWord(index, text) {
   }
 }
 
-$("btn-render").onclick = async () => {
-  await api(`/jobs/${enc(state.jobId)}/render`, { method: "POST" });
-  toast("Render iniciado");
-  startPoll();
-  setTimeout(refreshJob, 2000);
-};
-
-$("btn-repropose").onclick = async () => {
-  if (!confirm("¿Re-proponer clips con el motor actual? Se reemplazan los candidatos actuales.")) return;
+$("btn-render").onclick = (e) => withBusy(e.currentTarget, "Iniciando render", async () => {
   try {
-    await api(`/jobs/${enc(state.jobId)}/repropose`, { method: "POST" });
-    toast("Re-proposición iniciada");
+    await api(`/jobs/${enc(state.jobId)}/render`, { method: "POST" });
+    toast("Render iniciado");
     startPoll();
-    await refreshJob();
-  } catch (e) {
-    toast(e.message);
+    setTimeout(refreshJob, 2000);
+  } catch (err) {
+    toast(err.message);
   }
+});
+
+$("btn-repropose").onclick = (e) => {
+  if (!confirm("¿Re-proponer clips con el motor actual? Se reemplazan los candidatos actuales.")) return;
+  return withBusy(e.currentTarget, "Re-proponiendo", async () => {
+    try {
+      await api(`/jobs/${enc(state.jobId)}/repropose`, { method: "POST" });
+      toast("Re-proposición iniciada");
+      startPoll();
+      await refreshJob();
+    } catch (err) {
+      toast(err.message);
+    }
+  });
 };
 
-$("btn-run-eval").onclick = async () => {
+$("btn-run-eval").onclick = (e) => withBusy(e.currentTarget, "Evaluando", async () => {
   try {
     const rep = await api(`/jobs/${enc(state.jobId)}/eval`, { method: "POST" });
-    toast(`Precisión@${rep.n}: ${Math.round(rep.precision_at_n * 100)}%`);
+    toast(`Precisión@${rep.n}: ${fmtPct(rep.precision_at_n)}`);
     await refreshEval();
-  } catch (e) {
-    toast(e.message);
+  } catch (err) {
+    toast(err.message);
   }
-};
+});
 
 const dropzone = $("dropzone");
 const fileInput = $("file-input");
@@ -1425,10 +1627,14 @@ async function uploadFile(file) {
   }
 }
 
-loadJobs();
 bindProposePrefsOnce();
 bindRenderPrefsOnce();
 bindProfileOnce();
 bindPerformanceOnce();
+bindClipsToolbarOnce();
 bindGridKeyboardOnce();
+(async () => {
+  await loadJobs();
+  await routeFromUrl();
+})();
 startPoll();

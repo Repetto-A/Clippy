@@ -1,5 +1,44 @@
 # Changelog
 
+## 2026-07-03 — Timeline highlight + deep-linking + i18n numbers
+
+### Timeline semántico
+- El segmento del clip seleccionado se resalta (`.clip-seg.active`) sincronizado con la grilla.
+- Hover sobre un segmento selecciona el clip en la grilla; `aria-label` con título y rango temporal.
+
+### Deep-linking (URL state)
+- `job`, `clip`, `filter` y `sort` se reflejan en query params (`syncUrl`/`routeFromUrl`).
+- Soporte de back/forward del navegador (`popstate`) y restauración al recargar.
+
+### Números localizados
+- Helpers `fmtPct`/`fmtNum` con `Intl.NumberFormat` para porcentajes (precisión, recall, zoom)
+  y correlaciones/pesos, respetando el locale del usuario.
+
+## 2026-07-03 — A11y + guidelines audit (Vercel Web Interface Guidelines + WCAG)
+
+### Accesibilidad
+- `aria-label` en botones icon-only (play, step, zoom, overlay) + glifos `aria-hidden`.
+- `aria-label` en el select de razon de rechazo.
+- `color-scheme: dark` en root (scrollbars/inputs nativos correctos).
+- `touch-action: manipulation` en interactivos (sin delay de doble-tap).
+
+### Feedback / estados
+- Helper `withBusy`: botones async (Render, Re-proponer, Evaluar, Importar) se
+  deshabilitan y muestran "...accion..." durante la request.
+
+### Tipografia
+- `text-wrap: balance` en headings y titulos de estado vacio; `pretty` en descripciones.
+- `tabular-nums` en lecturas de tiempo/zoom restantes.
+
+## 2026-07-03 — UI polish (review flow + taste)
+
+### Producto / UI
+- Barra de progreso de revisión ("N de M revisados" + aprobados/rechazados/pendientes).
+- Filtros de candidatos (Todos/Pendientes/Aprobados/Rechazados) con contador por estado.
+- Orden de candidatos: cronológico o mejor puntaje primero.
+- Navegación J/K y atajos A/R ahora respetan el filtro activo.
+- Iconos SVG limpios en estados vacíos (reemplazan emojis, alineado con la carta de autonomia).
+
 ## 2026-07-03 — R3 export polish
 
 ### Producto / UI

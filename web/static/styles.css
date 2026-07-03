@@ -17,6 +17,7 @@
   --focus-ring: 0 0 0 2px var(--bg), 0 0 0 4px var(--accent);
   --font-sans: "Space Grotesk", "Segoe UI", system-ui, sans-serif;
   --font-mono: "JetBrains Mono", ui-monospace, monospace;
+  color-scheme: dark;
 }
 
 * { box-sizing: border-box; }
@@ -26,6 +27,9 @@ body {
   background: var(--bg);
   color: var(--text);
   min-height: 100vh;
+}
+button, a, select, input, .clip-card, .job-card, .word-chip {
+  touch-action: manipulation;
 }
 .skip-link {
   position: absolute;
@@ -580,6 +584,11 @@ button.ghost:hover:not(:disabled) { background: rgba(255, 255, 255, 0.04); }
   min-width: 2px;
 }
 .clip-seg:hover { filter: brightness(1.08); }
+.clip-seg.active {
+  background: var(--accent);
+  box-shadow: 0 0 0 1px var(--accent), 0 0 8px rgba(91, 141, 239, 0.6);
+  z-index: 2;
+}
 .job-timeline-axis { margin-top: 0.35rem; }
 
 .performance-import {
@@ -611,6 +620,8 @@ button.ghost:hover:not(:disabled) { background: rgba(255, 255, 255, 0.04); }
   line-height: 1;
   margin-bottom: 0.75rem;
   opacity: 0.7;
+  display: flex;
+  justify-content: center;
 }
 .empty-state-title {
   margin: 0 0 0.35rem;
@@ -628,7 +639,61 @@ button.ghost:hover:not(:disabled) { background: rgba(255, 255, 255, 0.04); }
 .empty-state.compact {
   padding: 1.5rem 1rem;
 }
-.empty-state.compact .empty-state-icon { font-size: 1.5rem; margin-bottom: 0.5rem; }
+.empty-state-icon svg { width: 2.25rem; height: 2.25rem; }
+.empty-state.compact .empty-state-icon { margin-bottom: 0.5rem; }
+.empty-state.compact .empty-state-icon svg { width: 1.75rem; height: 1.75rem; }
+
+.review-progress {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 0.85rem 1rem;
+  margin-bottom: 0.75rem;
+}
+.review-progress-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 1rem;
+  margin-bottom: 0.55rem;
+  flex-wrap: wrap;
+}
+.review-progress-label { font-weight: 600; font-size: 0.9rem; }
+.review-progress-counts { margin: 0; font-size: 0.82rem; }
+
+.clips-toolbar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 0.75rem;
+  margin-bottom: 0.75rem;
+  flex-wrap: wrap;
+}
+.clip-filters { display: flex; gap: 0.4rem; flex-wrap: wrap; }
+.filter-chip {
+  font-size: 0.8rem;
+  padding: 0.35rem 0.7rem;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+}
+.filter-chip:hover:not(.active) { border-color: #3d4658; color: var(--text); }
+.filter-chip.active {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+  color: var(--text);
+}
+.clip-sort select {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  color: var(--text);
+  padding: 0.35rem 0.5rem;
+  font: inherit;
+  font-size: 0.8rem;
+}
 
 .editor-header {
   display: flex;
@@ -763,9 +828,14 @@ button.ghost:hover:not(:disabled) { background: rgba(255, 255, 255, 0.04); }
   color: #fff;
   font-size: 0.8rem;
   font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
   min-width: 3.5rem;
   text-align: right;
 }
+
+h1, h2, h3 { text-wrap: balance; }
+.empty-state-title { text-wrap: balance; }
+.empty-state-desc { text-wrap: pretty; }
 
 .timeline-dock {
   border-top: 1px solid var(--border);
@@ -793,6 +863,7 @@ button.ghost:hover:not(:disabled) { background: rgba(255, 255, 255, 0.04); }
   color: var(--muted);
   min-width: 2.5rem;
   text-align: center;
+  font-variant-numeric: tabular-nums;
 }
 
 .timeline-scroll {

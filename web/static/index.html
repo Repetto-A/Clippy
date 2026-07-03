@@ -141,6 +141,28 @@
     </section>
     <section class="candidates-section">
       <h2>Candidatos</h2>
+      <div id="review-progress" class="review-progress hidden">
+        <div class="review-progress-head">
+          <span id="review-progress-label" class="review-progress-label">0 de 0 revisados</span>
+          <span id="review-progress-counts" class="review-progress-counts meta"></span>
+        </div>
+        <div class="progress-bar"><div id="review-progress-fill" class="progress-fill" style="width:0%"></div></div>
+      </div>
+      <div id="clips-toolbar" class="clips-toolbar hidden" role="toolbar" aria-label="Filtrar y ordenar candidatos">
+        <div class="clip-filters" role="group" aria-label="Filtrar por estado">
+          <button type="button" class="filter-chip active" data-filter="all">Todos</button>
+          <button type="button" class="filter-chip" data-filter="proposed">Pendientes</button>
+          <button type="button" class="filter-chip" data-filter="approved">Aprobados</button>
+          <button type="button" class="filter-chip" data-filter="rejected">Rechazados</button>
+        </div>
+        <label class="clip-sort">
+          <span class="sr-only">Ordenar candidatos</span>
+          <select id="clip-sort">
+            <option value="time">Orden cronológico</option>
+            <option value="score">Mejor puntaje primero</option>
+          </select>
+        </label>
+      </div>
       <p class="hint grid-shortcuts-hint">Atajos: <kbd>J</kbd>/<kbd>K</kbd> navegar · <kbd>A</kbd> aprobar · <kbd>R</kbd> rechazar</p>
       <div id="clips-list" class="clips-grid" role="list"></div>
     </section>
@@ -155,7 +177,7 @@
         <div id="editor-rubric" class="rubric-bars hidden"></div>
       </div>
       <div class="clip-actions">
-        <select id="reject-reason" class="reject-reason" title="Razón si rechazás">
+        <select id="reject-reason" class="reject-reason" title="Razón si rechazás" aria-label="Razón de rechazo">
           <option value="">Razón de rechazo…</option>
           <option value="bad_hook">Hook débil</option>
           <option value="not_self_contained">No autocontenido</option>
@@ -171,9 +193,9 @@
     <div class="editor-layout">
       <div class="editor-workspace">
         <div class="editor-toolbar">
-          <button id="btn-play" type="button" title="Espacio">▶</button>
-          <button id="btn-step-back" type="button" title="← 0.5s">⏮</button>
-          <button id="btn-step-fwd" type="button" title="→ 0.5s">⏭</button>
+          <button id="btn-play" type="button" title="Espacio" aria-label="Reproducir o pausar"><span aria-hidden="true">▶</span></button>
+          <button id="btn-step-back" type="button" title="← 0.5s" aria-label="Retroceder 0.5 segundos"><span aria-hidden="true">⏮</span></button>
+          <button id="btn-step-fwd" type="button" title="→ 0.5s" aria-label="Avanzar 0.5 segundos"><span aria-hidden="true">⏭</span></button>
           <span class="toolbar-sep"></span>
           <button id="btn-set-in" type="button" title="I">In</button>
           <button id="btn-set-out" type="button" title="O">Out</button>
@@ -185,7 +207,7 @@
         <div class="preview-stage">
           <video id="player" playsinline></video>
           <div class="preview-overlay">
-            <button id="btn-overlay-play" type="button" class="overlay-btn" title="Espacio">▶</button>
+            <button id="btn-overlay-play" type="button" class="overlay-btn" title="Espacio" aria-label="Reproducir o pausar"><span aria-hidden="true">▶</span></button>
             <div class="preview-progress" id="preview-progress">
               <div class="preview-progress-fill" id="preview-progress-fill"></div>
             </div>
@@ -196,9 +218,9 @@
         <div class="timeline-dock">
           <div class="timeline-toolbar">
             <span class="timeline-toolbar-label">Timeline</span>
-            <button id="btn-zoom-out" type="button" title="Alejar">−</button>
+            <button id="btn-zoom-out" type="button" title="Alejar" aria-label="Alejar timeline"><span aria-hidden="true">−</span></button>
             <span id="zoom-label" class="zoom-label">100%</span>
-            <button id="btn-zoom-in" type="button" title="Acercar">+</button>
+            <button id="btn-zoom-in" type="button" title="Acercar" aria-label="Acercar timeline"><span aria-hidden="true">+</span></button>
             <button id="btn-zoom-fit" type="button" title="Encuadrar clip">Fit</button>
           </div>
           <div class="timeline-scroll" id="timeline-scroll">
