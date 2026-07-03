@@ -22,7 +22,12 @@ class ProposePrefs(BaseModel):
         return self
 
 
-def default_propose_prefs() -> ProposePrefs:
+def default_propose_prefs(workdir=None) -> ProposePrefs:
+    if workdir is not None:
+        from .content_profile import propose_defaults_for_profile
+        from .storage import load_job_profile
+
+        return propose_defaults_for_profile(load_job_profile(workdir).profile)
     return ProposePrefs(
         target_clips=settings.target_clips,
         min_duration=settings.min_duration,

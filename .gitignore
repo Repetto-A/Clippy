@@ -24,6 +24,7 @@ _analysis/
 .ruff_cache/
 .idea/
 .vscode/
+.playwright-cli/
 
 # Virtualenv del proyecto (ASR)
 .venv-asr/

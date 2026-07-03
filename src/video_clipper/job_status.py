@@ -14,6 +14,8 @@ def _now() -> str:
 
 
 def init(workdir: Path, source: Path) -> JobStatusRecord:
+    from .content_profile import default_job_profile
+
     rec = JobStatusRecord(
         source=str(source.resolve()),
         stage=JobStage.QUEUED,
@@ -23,6 +25,7 @@ def init(workdir: Path, source: Path) -> JobStatusRecord:
         updated_at=_now(),
     )
     storage.save_job_status(rec, workdir)
+    storage.save_job_profile(default_job_profile(), workdir)
     return rec
 
 

@@ -17,8 +17,14 @@ from .schemas import (
     EvalReportResponse,
     GoldenSummary,
     JobDetail,
+    JobProfilePatch,
+    JobProfileResponse,
     JobSummary,
+    JobTimelineResponse,
     MessageResponse,
+    PerformanceImportRequest,
+    PerformanceReportResponse,
+    PerformanceSetResponse,
     ProcessPathRequest,
     ProposePrefsPatch,
     ProposePrefsResponse,
@@ -51,11 +57,13 @@ def get_job(job_id: str) -> JobDetail:
         raise HTTPException(404, "Job no encontrado")
     rec, duration = result
     base = job_summary(services.decode_job_id(job_id), rec)
+    profile = services.get_job_profile(job_id)
     return JobDetail(
         **base.model_dump(),
         source=rec.source,
         duration=duration,
         started_at=rec.started_at,
+        profile=profile.profile.value if profile else "training",
     )
 
 
@@ -81,7 +89,7 @@ async def upload_job(file: UploadFile = File(...)) -> JobSummary:
 def process_path(body: ProcessPathRequest) -> JobSummary:
     path = Path(body.path)
     try:
-        job_id = services.start_job(path)
+        job_id = services.start_job(path, profile=body.profile)
     except FileNotFoundError as e:
         raise HTTPException(404, str(e)) from e
     except RuntimeError as e:
@@ -185,10 +193,11 @@ def render_job(job_id: str) -> MessageResponse:
 def download_clip_output(job_id: str, clip_id: str, fmt: str) -> FileResponse:
     if fmt not in ("9x16", "16x9", "9x16_social", "16x9_social"):
         raise HTTPException(400, "fmt debe ser 9x16, 16x9, 9x16_social o 16x9_social")
-    path = services.clip_output_path(job_id, clip_id, fmt)
-    if path is None:
+    result = services.clip_output_download(job_id, clip_id, fmt)
+    if result is None:
         raise HTTPException(404, "Render no encontrado")
-    return FileResponse(path, media_type="video/mp4", filename=path.name)
+    path, filename = result
+    return FileResponse(path, media_type="video/mp4", filename=filename)
 
 
 @app.post("/api/jobs/{job_id}/retry", response_model=JobSummary)
@@ -236,6 +245,60 @@ def run_eval(job_id: str) -> EvalReportResponse:
     if rep is None:
         raise HTTPException(404, "No se pudo evaluar")
     return EvalReportResponse(**rep.model_dump(), has_baseline=True)
+
+
+@app.get("/api/jobs/{job_id}/profile", response_model=JobProfileResponse)
+def get_profile(job_id: str) -> JobProfileResponse:
+    profile = services.get_job_profile(job_id)
+    if profile is None:
+        raise HTTPException(404, "Job no encontrado")
+    return JobProfileResponse(profile=profile.profile.value)
+
+
+@app.patch("/api/jobs/{job_id}/profile", response_model=JobProfileResponse)
+def patch_profile(job_id: str, body: JobProfilePatch) -> JobProfileResponse:
+    profile = services.patch_job_profile(job_id, body.profile)
+    if profile is None:
+        raise HTTPException(404, "Job no encontrado")
+    return JobProfileResponse(profile=profile.profile.value)
+
+
+@app.get("/api/jobs/{job_id}/timeline", response_model=JobTimelineResponse)
+def get_timeline(job_id: str) -> JobTimelineResponse:
+    timeline = services.get_job_timeline(job_id)
+    if timeline is None:
+        raise HTTPException(404, "Timeline no disponible todavia")
+    return JobTimelineResponse(**timeline.model_dump())
+
+
+@app.get("/api/jobs/{job_id}/performance", response_model=PerformanceSetResponse)
+def get_performance(job_id: str) -> PerformanceSetResponse:
+    wd = services.workdir_for(job_id)
+    if not wd.is_dir():
+        raise HTTPException(404, "Job no encontrado")
+    from .. import storage
+
+    perf = storage.load_performance(wd)
+    return PerformanceSetResponse(**perf.model_dump())
+
+
+@app.post("/api/jobs/{job_id}/performance", response_model=PerformanceSetResponse)
+def import_performance(job_id: str, body: PerformanceImportRequest) -> PerformanceSetResponse:
+    fmt = body.format.lower().strip()
+    if fmt not in ("json", "csv"):
+        raise HTTPException(400, "format debe ser json o csv")
+    perf = services.import_performance(job_id, raw=body.data, fmt=fmt)
+    if perf is None:
+        raise HTTPException(404, "Job no encontrado")
+    return PerformanceSetResponse(**perf.model_dump())
+
+
+@app.get("/api/jobs/{job_id}/performance/report", response_model=PerformanceReportResponse)
+def performance_report(job_id: str) -> PerformanceReportResponse:
+    report = services.get_performance_report(job_id)
+    if report is None:
+        raise HTTPException(404, "Job no encontrado")
+    return PerformanceReportResponse(**report.model_dump())
 
 
 @app.api_route("/api/jobs/{job_id}/video", methods=["GET", "HEAD"])

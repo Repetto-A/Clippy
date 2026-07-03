@@ -86,7 +86,7 @@ def load_render_prefs(workdir: Path):
 
     p = workdir / "render_prefs.json"
     if not p.exists():
-        return default_render_prefs()
+        return default_render_prefs(workdir)
     return RenderPrefs.model_validate_json(p.read_text(encoding="utf-8"))
 
 
@@ -104,8 +104,44 @@ def load_propose_prefs(workdir: Path):
 
     p = workdir / "propose_prefs.json"
     if not p.exists():
-        return default_propose_prefs()
+        return default_propose_prefs(workdir)
     return ProposePrefs.model_validate_json(p.read_text(encoding="utf-8"))
+
+
+def save_job_profile(profile, workdir: Path) -> Path:
+    from .content_profile import JobProfile
+
+    p = workdir / "profile.json"
+    data = profile if isinstance(profile, JobProfile) else JobProfile.model_validate(profile)
+    p.write_text(data.model_dump_json(indent=2), encoding="utf-8")
+    return p
+
+
+def load_job_profile(workdir: Path):
+    from .content_profile import JobProfile, default_job_profile
+
+    p = workdir / "profile.json"
+    if not p.exists():
+        return default_job_profile()
+    return JobProfile.model_validate_json(p.read_text(encoding="utf-8"))
+
+
+def save_performance(perf, workdir: Path) -> Path:
+    from .performance import PerformanceSet
+
+    p = workdir / "performance.json"
+    data = perf if isinstance(perf, PerformanceSet) else PerformanceSet.model_validate(perf)
+    p.write_text(data.model_dump_json(indent=2), encoding="utf-8")
+    return p
+
+
+def load_performance(workdir: Path):
+    from .performance import PerformanceSet
+
+    p = workdir / "performance.json"
+    if not p.exists():
+        return PerformanceSet()
+    return PerformanceSet.model_validate_json(p.read_text(encoding="utf-8"))
 
 
 def save_job_status(j: JobStatusRecord, workdir: Path) -> Path:

@@ -24,7 +24,12 @@ class RenderPrefs(BaseModel):
         return s
 
 
-def default_render_prefs() -> RenderPrefs:
+def default_render_prefs(workdir=None) -> RenderPrefs:
+    if workdir is not None:
+        from .content_profile import render_defaults_for_profile
+        from .storage import load_job_profile
+
+        return render_defaults_for_profile(load_job_profile(workdir).profile)
     return RenderPrefs(
         caption_style=settings.caption_style.lower().strip(),
         caption_social_max_words=settings.caption_social_max_words,

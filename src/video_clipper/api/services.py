@@ -9,10 +9,20 @@ from urllib.parse import unquote
 from .. import job_status, storage
 from ..clip_utils import clamp_range, clip_words, sync_clip_words
 from ..config import settings
+from ..content_profile import JobProfile, parse_profile
 from ..models import ClipStatus, JobStage, Layout, RejectionReason
+from ..performance import (
+    PerformanceReport,
+    PerformanceSet,
+    build_performance_report,
+    merge_performance,
+    parse_performance_csv,
+    parse_performance_json,
+)
 from ..review import record_golden
 from ..captions import caption_preview_samples
 from ..pipeline import run_all, stage_propose, stage_render
+from ..timeline import JobTimeline, build_job_timeline
 
 _lock = threading.Lock()
 _running: set[str] = set()
@@ -79,7 +89,7 @@ def _run_pipeline(source: Path, job_id: str) -> None:
             _running.discard(job_id)
 
 
-def start_job(source: Path) -> str:
+def start_job(source: Path, *, profile: str | None = None) -> str:
     source = source.resolve()
     if not source.is_file():
         raise FileNotFoundError(f"No existe: {source}")
@@ -91,6 +101,8 @@ def start_job(source: Path) -> str:
     workdir = settings.source_workdir(source)
     workdir.mkdir(parents=True, exist_ok=True)
     job_status.init(workdir, source)
+    if profile:
+        storage.save_job_profile(JobProfile(profile=parse_profile(profile)), workdir)
     threading.Thread(target=_run_pipeline, args=(source, job_id), daemon=True).start()
     return job_id
 
@@ -236,6 +248,23 @@ def clip_output_path(job_id: str, clip_id: str, fmt: str) -> Path | None:
     return None
 
 
+def clip_output_download(job_id: str, clip_id: str, fmt: str) -> tuple[Path, str] | None:
+    """Ruta del render + nombre de descarga legible."""
+    from ..export_names import build_export_filename
+
+    path = clip_output_path(job_id, clip_id, fmt)
+    if path is None:
+        return None
+    cset = get_candidates(job_id)
+    if cset is None:
+        return path, path.name
+    clip = next((c for c in cset.candidates if c.id == clip_id), None)
+    if clip is None:
+        return path, path.name
+    job_slug = decode_job_id(job_id)
+    return path, build_export_filename(clip, fmt, job_slug=job_slug)
+
+
 def run_job_eval(job_id: str):
     from ..config import settings
     from ..eval import run_eval
@@ -346,3 +375,48 @@ def patch_propose_prefs(job_id: str, patch) -> object | None:
     updated = ProposePrefs.model_validate({**current.model_dump(), **data})
     storage.save_propose_prefs(updated, wd)
     return updated
+
+
+def get_job_profile(job_id: str):
+    wd = workdir_for(job_id)
+    if not wd.is_dir():
+        return None
+    return storage.load_job_profile(wd)
+
+
+def patch_job_profile(job_id: str, profile: str):
+    wd = workdir_for(job_id)
+    if not wd.is_dir():
+        return None
+    updated = JobProfile(profile=parse_profile(profile))
+    storage.save_job_profile(updated, wd)
+    return updated
+
+
+def get_job_timeline(job_id: str) -> JobTimeline | None:
+    wd = workdir_for(job_id)
+    if not wd.is_dir():
+        return None
+    if not (wd / "signals.json").exists() and not (wd / "candidates.json").exists():
+        return None
+    return build_job_timeline(wd)
+
+
+def import_performance(job_id: str, *, raw: str, fmt: str = "json") -> PerformanceSet | None:
+    wd = workdir_for(job_id)
+    if not wd.is_dir():
+        return None
+    if fmt == "csv":
+        incoming = parse_performance_csv(raw)
+    else:
+        incoming = parse_performance_json(raw)
+    merged = merge_performance(storage.load_performance(wd), incoming)
+    storage.save_performance(merged, wd)
+    return merged
+
+
+def get_performance_report(job_id: str) -> PerformanceReport | None:
+    wd = workdir_for(job_id)
+    if not wd.is_dir():
+        return None
+    return build_performance_report(wd)

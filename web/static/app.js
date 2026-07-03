@@ -20,6 +20,9 @@ const state = {
   drag: null,
   editorBound: false,
   prefsBound: false,
+  proposePrefsBound: false,
+  profileBound: false,
+  performanceBound: false,
   gridBound: false,
   timelineZoom: 1,
 };
@@ -211,6 +214,18 @@ function clipMetaLine(c) {
   return `${base}<br><span class="rubric-mini">H${Math.round(c.hook_strength)} · S${Math.round(c.self_contained)} · T${Math.round(c.takeaway_clarity)} · P${Math.round(c.payoff)}</span>`;
 }
 
+function clipExplainHtml(c, { compact = false } = {}) {
+  const hook = c.hook || (c.transcript ? c.transcript.slice(0, compact ? 100 : 220) : "");
+  const reason = c.reason || "";
+  const parts = [];
+  if (hook) parts.push(`<p class="clip-hook">${escapeHtml(hook)}</p>`);
+  if (reason) parts.push(`<p class="clip-reason meta">${escapeHtml(reason)}</p>`);
+  if (hasRubric(c) && !compact) {
+    parts.push(`<div class="rubric-bars compact">${rubricHtml(c)}</div>`);
+  }
+  return parts.join("");
+}
+
 function updateJobHeader(job) {
   $("job-title").textContent = job.name;
   const badge = $("job-status-badge");
@@ -281,6 +296,9 @@ async function refreshJob() {
     $("eval-section").classList.add("hidden");
     $("propose-prefs-section").classList.add("hidden");
     $("render-prefs-section").classList.add("hidden");
+    $("timeline-section").classList.add("hidden");
+    $("profile-section").classList.add("hidden");
+    $("performance-section").classList.add("hidden");
     startPoll();
     return;
   }
@@ -302,8 +320,11 @@ async function refreshJob() {
     renderClips(data.candidates);
     renderOutputs(data.candidates);
     await refreshEval();
+    await loadJobProfile();
     await loadProposePrefs();
     await loadRenderPrefs();
+    await loadJobTimeline();
+    await loadPerformanceReport();
   } catch {
     $("clips-list").innerHTML = emptyState(
       "📋",
@@ -438,6 +459,159 @@ function bindRenderPrefsOnce() {
   $("pref-social-words").addEventListener("change", loadCaptionPreview);
 }
 
+async function loadJobProfile() {
+  const section = $("profile-section");
+  if (!state.jobId) return;
+  try {
+    const job = state.job || await api(`/jobs/${enc(state.jobId)}`);
+    section.classList.remove("hidden");
+    $("job-profile").value = job.profile || "training";
+  } catch {
+    section.classList.add("hidden");
+  }
+}
+
+async function saveJobProfile() {
+  if (!state.jobId) return;
+  try {
+    await api(`/jobs/${enc(state.jobId)}/profile`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ profile: $("job-profile").value }),
+    });
+    toast("Perfil actualizado");
+    await loadProposePrefs();
+    await loadRenderPrefs();
+  } catch (e) {
+    toast(e.message);
+  }
+}
+
+function bindProfileOnce() {
+  if (state.profileBound) return;
+  state.profileBound = true;
+  $("job-profile").addEventListener("change", saveJobProfile);
+}
+
+function renderJobTimeline(tl) {
+  const el = $("job-timeline");
+  if (!tl?.duration) {
+    el.innerHTML = "";
+    return;
+  }
+  let track = '<div class="job-timeline-track">';
+  track += '<div class="job-timeline-heat">';
+  for (const b of tl.buckets || []) {
+    const left = (b.start / tl.duration) * 100;
+    const width = ((b.end - b.start) / tl.duration) * 100;
+    const opacity = 0.12 + (b.intensity || 0) * 0.88;
+    track += `<div class="heat-seg" style="left:${left}%;width:${width}%;opacity:${opacity}"></div>`;
+  }
+  track += "</div>";
+  for (const d of tl.dirty || []) {
+    const left = (d.start / tl.duration) * 100;
+    const width = ((d.end - d.start) / tl.duration) * 100;
+    track += `<div class="dirty-seg" style="left:${left}%;width:${width}%"></div>`;
+  }
+  for (const c of tl.clips || []) {
+    const left = (c.start / tl.duration) * 100;
+    const width = Math.max(0.4, ((c.end - c.start) / tl.duration) * 100);
+    track += `<button type="button" class="clip-seg" data-id="${escapeAttr(c.id)}" style="left:${left}%;width:${width}%" title="${escapeAttr(c.title || c.id)}"></button>`;
+  }
+  track += "</div>";
+  track += `<div class="job-timeline-axis meta">${fmtTime(0)} · ${fmtTime(tl.duration)}</div>`;
+  el.innerHTML = track;
+  el.querySelectorAll(".clip-seg").forEach((btn) => {
+    btn.onclick = (e) => {
+      e.stopPropagation();
+      openEditor(btn.dataset.id);
+    };
+  });
+  const trackEl = el.querySelector(".job-timeline-track");
+  trackEl.onclick = (e) => {
+    if (e.target.closest(".clip-seg")) return;
+    const rect = trackEl.getBoundingClientRect();
+    const ratio = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width));
+    const t = ratio * tl.duration;
+    const clips = tl.clips || [];
+    if (!clips.length) return;
+    let nearest = clips[0];
+    let best = Math.abs((nearest.start + nearest.end) / 2 - t);
+    for (const c of clips) {
+      const dist = Math.abs((c.start + c.end) / 2 - t);
+      if (dist < best) {
+        best = dist;
+        nearest = c;
+      }
+    }
+    openEditor(nearest.id);
+  };
+}
+
+async function loadJobTimeline() {
+  const section = $("timeline-section");
+  if (!state.jobId) return;
+  try {
+    const tl = await api(`/jobs/${enc(state.jobId)}/timeline`);
+    section.classList.remove("hidden");
+    renderJobTimeline(tl);
+  } catch {
+    section.classList.add("hidden");
+  }
+}
+
+async function loadPerformanceReport() {
+  const section = $("performance-section");
+  if (!state.jobId) return;
+  section.classList.remove("hidden");
+  try {
+    const report = await api(`/jobs/${enc(state.jobId)}/performance/report`);
+    const el = $("performance-report");
+    if (report.message && !report.sample_size) {
+      el.textContent = report.message;
+      return;
+    }
+    const lines = [`Muestra: ${report.sample_size} clips`];
+    for (const c of report.correlations || []) {
+      if (c.correlation != null) {
+        lines.push(`${c.sub_score}: r=${c.correlation.toFixed(2)} (${c.metric})`);
+      }
+    }
+    for (const s of report.suggestions || []) {
+      lines.push(`Sugerencia ${s.sub_score}: ${s.current} -> ${s.suggested.toFixed(2)} · ${s.reason}`);
+    }
+    el.innerHTML = lines.map((line) => `<div>${escapeHtml(line)}</div>`).join("");
+  } catch {
+    $("performance-report").textContent = "";
+  }
+}
+
+async function importPerformance() {
+  const raw = $("performance-import").value.trim();
+  if (!raw) {
+    toast("Pegá JSON o CSV primero");
+    return;
+  }
+  const format = raw.startsWith("[") || raw.startsWith("{") ? "json" : "csv";
+  try {
+    await api(`/jobs/${enc(state.jobId)}/performance`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ format, data: raw }),
+    });
+    toast("Metricas importadas");
+    await loadPerformanceReport();
+  } catch (e) {
+    toast(e.message);
+  }
+}
+
+function bindPerformanceOnce() {
+  if (state.performanceBound) return;
+  state.performanceBound = true;
+  $("btn-import-performance").onclick = importPerformance;
+}
+
 function getSelectedGridClipId() {
   return state.selectedClipId || state.candidates[0]?.id || null;
 }
@@ -540,8 +714,42 @@ function outputLabel(fmt) {
   return labels[fmt] || fmt;
 }
 
-function previewFormat(outputs) {
-  return ["9x16", "9x16_social", "16x9", "16x9_social"].find((f) => outputs[f]);
+const OUTPUT_FMTS = ["9x16", "9x16_social", "16x9", "16x9_social"];
+
+const OUTPUT_SUFFIX = {
+  "9x16": "vertical-karaoke",
+  "9x16_social": "vertical-social",
+  "16x9": "horizontal-karaoke",
+  "16x9_social": "horizontal-social",
+};
+
+function slugifyName(text, maxLen = 48) {
+  const slug = String(text || "clip")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^a-zA-Z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .toLowerCase();
+  const trimmed = slug.slice(0, maxLen).replace(/-+$/g, "");
+  return trimmed || "clip";
+}
+
+function exportFilename(c, fmt) {
+  const job = slugifyName(state.job?.name || state.jobId || "job", 32);
+  const title = slugifyName(c.title || c.id, 48);
+  const suffix = OUTPUT_SUFFIX[fmt] || fmt;
+  return `${job}-${title}-${suffix}.mp4`;
+}
+
+function previewFormat(outputs, preferred = "9x16") {
+  if (outputs[preferred]) return preferred;
+  return OUTPUT_FMTS.find((f) => outputs[f]);
+}
+
+function renderBadgeHtml(c) {
+  const keys = c.outputs ? Object.keys(c.outputs) : [];
+  if (!keys.length) return "";
+  return `<span class="badge badge-render" title="${keys.length} archivo(s)">${keys.length} render</span>`;
 }
 
 function renderOutputs(clips) {
@@ -554,26 +762,48 @@ function renderOutputs(clips) {
   }
   section.classList.remove("hidden");
   list.innerHTML = withOut.map((c) => {
-    const links = Object.entries(c.outputs).map(([fmt]) => {
+    const formats = OUTPUT_FMTS.filter((f) => c.outputs[f]);
+    const defaultFmt = previewFormat(c.outputs);
+    const links = formats.map((fmt) => {
       const url = `/api/jobs/${enc(state.jobId)}/clips/${c.id}/output/${fmt}`;
-      return `<a href="${url}" download target="_blank" rel="noopener">${outputLabel(fmt)} ↓</a>`;
+      const fname = exportFilename(c, fmt);
+      return `<a href="${url}" download="${escapeAttr(fname)}" target="_blank" rel="noopener" class="render-dl-pill">${outputLabel(fmt)}</a>`;
     }).join("");
-    const pf = previewFormat(c.outputs);
-    const preview = pf
-      ? `/api/jobs/${enc(state.jobId)}/clips/${c.id}/output/${pf}`
-      : "";
+    const previewTabs = formats.length > 1
+      ? `<div class="render-preview-tabs" data-clip="${escapeAttr(c.id)}">${formats.map((fmt, i) =>
+          `<button type="button" class="render-preview-tab${fmt === defaultFmt ? " active" : ""}" data-fmt="${fmt}">${outputLabel(fmt)}</button>`
+        ).join("")}</div>`
+      : `<div class="render-preview-meta meta">${outputLabel(defaultFmt)}</div>`;
+    const previewUrl = `/api/jobs/${enc(state.jobId)}/clips/${c.id}/output/${defaultFmt}`;
     return `
-      <article class="render-card">
+      <article class="render-card" data-clip-id="${escapeAttr(c.id)}">
         <div class="render-card-head">
           <div>
             <div class="clip-title">${escapeHtml(c.title || c.id)}</div>
-            <div class="clip-meta">${fmtTime(c.start)} – ${fmtTime(c.end)} · ${statusLabel(c.status)}</div>
+            <div class="clip-meta">${fmtTime(c.start)} – ${fmtTime(c.end)} · ${statusLabel(c.status)} · ${formats.length} formato(s)</div>
           </div>
           <div class="render-links">${links}</div>
         </div>
-        <video class="render-preview" src="${preview}" controls playsinline preload="metadata"></video>
+        ${previewTabs}
+        <video class="render-preview" data-preview-for="${escapeAttr(c.id)}" src="${previewUrl}" controls playsinline preload="metadata"></video>
       </article>`;
   }).join("");
+
+  list.querySelectorAll(".render-preview-tabs").forEach((tabs) => {
+    const clipId = tabs.dataset.clip;
+    const card = tabs.closest(".render-card");
+    const video = card?.querySelector(".render-preview");
+    tabs.querySelectorAll(".render-preview-tab").forEach((btn) => {
+      btn.onclick = () => {
+        tabs.querySelectorAll(".render-preview-tab").forEach((b) => b.classList.remove("active"));
+        btn.classList.add("active");
+        if (video) {
+          video.src = `/api/jobs/${enc(state.jobId)}/clips/${clipId}/output/${btn.dataset.fmt}`;
+          video.load();
+        }
+      };
+    });
+  });
 }
 
 $("btn-retry").onclick = async () => {
@@ -598,11 +828,15 @@ function renderClipsHtml(clips) {
   }
   return clips.map((c) => `
     <article class="clip-card" data-id="${c.id}" tabindex="0" role="listitem">
-      <div>
+      <div class="clip-card-body">
         <div class="clip-title">${escapeHtml(c.title || c.id)}</div>
         <div class="clip-meta">${clipMetaLine(c)}</div>
+        ${clipExplainHtml(c, { compact: true })}
       </div>
-      <span class="badge ${statusBadgeClass(c.status)}">${statusLabel(c.status)}</span>
+      <div class="clip-badges">
+        ${renderBadgeHtml(c)}
+        <span class="badge ${statusBadgeClass(c.status)}">${statusLabel(c.status)}</span>
+      </div>
     </article>
   `).join("");
 }
@@ -812,6 +1046,11 @@ async function openEditor(clipId) {
   const rubric = rubricHtml(clip);
   rubricEl.innerHTML = rubric;
   rubricEl.classList.toggle("hidden", !rubric);
+
+  const explainEl = $("editor-explain");
+  const explain = clipExplainHtml(clip);
+  explainEl.innerHTML = explain;
+  explainEl.classList.toggle("hidden", !explain);
 
   const player = $("player");
   player.src = `/api/jobs/${enc(state.jobId)}/video`;
@@ -1189,5 +1428,7 @@ async function uploadFile(file) {
 loadJobs();
 bindProposePrefsOnce();
 bindRenderPrefsOnce();
+bindProfileOnce();
+bindPerformanceOnce();
 bindGridKeyboardOnce();
 startPoll();

@@ -1,7 +1,0 @@
-{
-  "n": 1,
-  "matched": 1,
-  "precision_at_n": 1.0,
-  "recall": 1.0,
-  "false_positives_by_reason": {}
-}

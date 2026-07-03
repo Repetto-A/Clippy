@@ -141,3 +141,14 @@ Guía: `docs/M1-baseline.md`. El motor M2 (scan→rank→refine) debe superar es
 ## Diseño
 
 Ver `docs/specs/2026-06-18-video-clipper-design.md`.
+
+## Decisiones y roadmap
+
+El proyecto avanza mediante un loop autónomo documentado:
+
+- **Carta de autonomía** — cómo se decide sin revisión constante, guardrails y done-when:
+  `docs/autonomy-charter.md`.
+- **ADRs** — decisiones de arquitectura/producto (contexto → decisión → consecuencias):
+  `docs/adr/README.md`.
+- **Roadmap** — reps priorizados con done-when: `docs/roadmap/2026-Q3.md`.
+- **Specs / plans** — diseño detallado por subsistema: `docs/specs/`, `docs/plans/`.

@@ -45,6 +45,28 @@
         <button id="btn-retry" class="ghost hidden" type="button">Reintentar procesamiento</button>
       </div>
     </div>
+    <section id="profile-section" class="profile-section hidden">
+      <h2>Perfil de contenido</h2>
+      <label class="pref-field">
+        <span>Tipo de material</span>
+        <select id="job-profile">
+          <option value="training">Clase / training (slide + webcam)</option>
+          <option value="podcast">Podcast (futuro)</option>
+          <option value="stream">Stream (futuro)</option>
+        </select>
+      </label>
+      <p class="hint">Define defaults de propuesta y export. Se puede cambiar antes de propose/render.</p>
+    </section>
+    <section id="timeline-section" class="timeline-section hidden">
+      <h2>Mapa de la clase</h2>
+      <div class="timeline-legend meta">
+        <span class="legend-item"><i class="legend-swatch heat"></i> Intensidad de candidatos</span>
+        <span class="legend-item"><i class="legend-swatch clip"></i> Clips propuestos</span>
+        <span class="legend-item"><i class="legend-swatch dirty"></i> Pantalla sucia</span>
+      </div>
+      <div id="job-timeline" class="job-timeline" role="img" aria-label="Timeline semantico del video"></div>
+      <p id="timeline-hint" class="hint">Click en un tramo para abrir el clip mas cercano.</p>
+    </section>
     <section id="propose-prefs-section" class="propose-prefs hidden">
       <h2>Opciones de propuesta</h2>
       <div class="prefs-grid">
@@ -104,6 +126,15 @@
       <div id="eval-stats" class="eval-stats meta"></div>
       <p id="eval-hint" class="hint">Aprobá o rechazá clips con razón para construir el golden set.</p>
     </section>
+    <section id="performance-section" class="performance-section hidden">
+      <h2>Performance externa</h2>
+      <p class="hint">Pegá CSV o JSON con metricas por clip_id (views, retention_pct, saves).</p>
+      <textarea id="performance-import" class="performance-import" rows="4" placeholder='[{"clip_id":"c1","views":1200,"retention_pct":62.5}]'></textarea>
+      <div class="performance-actions">
+        <button id="btn-import-performance" class="ghost" type="button">Importar metricas</button>
+      </div>
+      <div id="performance-report" class="performance-report meta"></div>
+    </section>
     <section id="renders-section" class="hidden">
       <h2>Clips renderizados</h2>
       <div id="renders-list" class="renders-list"></div>
@@ -120,6 +151,7 @@
       <div>
         <h1 id="editor-clip-title">Clip</h1>
         <p id="editor-clip-meta" class="meta"></p>
+        <div id="editor-explain" class="clip-explain hidden"></div>
         <div id="editor-rubric" class="rubric-bars hidden"></div>
       </div>
       <div class="clip-actions">

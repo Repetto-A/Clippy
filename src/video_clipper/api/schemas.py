@@ -24,6 +24,7 @@ class JobDetail(JobSummary):
     source: str
     duration: float | None = None
     started_at: str | None = None
+    profile: str = "training"
 
 
 class CandidateSetResponse(BaseModel):
@@ -104,6 +105,87 @@ class WordPatch(BaseModel):
 
 class ProcessPathRequest(BaseModel):
     path: str = Field(description="Ruta absoluta al .mp4 en disco local")
+    profile: str | None = Field(default=None, description="training | podcast | stream")
+
+
+class JobProfileResponse(BaseModel):
+    profile: str
+
+
+class JobProfilePatch(BaseModel):
+    profile: str
+
+
+class TimelineRangeResponse(BaseModel):
+    start: float
+    end: float
+
+
+class TimelineBucketResponse(BaseModel):
+    start: float
+    end: float
+    intensity: float
+
+
+class TimelineClipResponse(BaseModel):
+    id: str
+    start: float
+    end: float
+    score: float
+    title: str = ""
+    status: str = "proposed"
+    hook: str = ""
+
+
+class JobTimelineResponse(BaseModel):
+    duration: float
+    bucket_count: int
+    buckets: list[TimelineBucketResponse] = Field(default_factory=list)
+    clips: list[TimelineClipResponse] = Field(default_factory=list)
+    silences: list[TimelineRangeResponse] = Field(default_factory=list)
+    dirty: list[TimelineRangeResponse] = Field(default_factory=list)
+
+
+class PerformanceImportRequest(BaseModel):
+    format: str = Field(default="json", description="json | csv")
+    data: str = Field(description="Contenido JSON o CSV")
+
+
+class PerformanceRecordResponse(BaseModel):
+    clip_id: str
+    platform: str
+    views: int
+    retention_pct: float | None = None
+    saves: int = 0
+    shares: int = 0
+    published_at: str | None = None
+
+
+class PerformanceSetResponse(BaseModel):
+    records: list[PerformanceRecordResponse] = Field(default_factory=list)
+
+
+class RubricCorrelationResponse(BaseModel):
+    sub_score: str
+    metric: str
+    sample_size: int
+    correlation: float | None = None
+    avg_high: float | None = None
+    avg_low: float | None = None
+
+
+class WeightSuggestionResponse(BaseModel):
+    sub_score: str
+    current: float
+    suggested: float
+    reason: str
+
+
+class PerformanceReportResponse(BaseModel):
+    sample_size: int = 0
+    correlations: list[RubricCorrelationResponse] = Field(default_factory=list)
+    suggestions: list[WeightSuggestionResponse] = Field(default_factory=list)
+    message: str | None = None
 
 
 class MessageResponse(BaseModel):
