@@ -18,12 +18,49 @@
 
   <div id="main-content">
   <main id="view-inbox" class="view">
-    <section class="dropzone" id="dropzone">
-      <input type="file" id="file-input" accept="video/mp4" hidden />
-      <p class="drop-title">Arrastrá un .mp4 acá</p>
-      <p class="drop-sub">o hacé click para elegir · el pipeline corre en background</p>
+    <section class="inbox-hero">
+      <h1 class="inbox-hero-title">De tu clase grabada a clips listos para publicar</h1>
+      <p class="inbox-hero-sub">Clippy transcribe tu video, detecta los mejores momentos y te deja revisarlos y renderizarlos en vertical y horizontal, con subtítulos.</p>
     </section>
-    <section>
+    <section class="dropzone" id="dropzone" role="button" tabindex="0" aria-label="Subir video: arrastrá un .mp4 o activá para elegir un archivo">
+      <input type="file" id="file-input" accept="video/mp4" hidden />
+      <p class="drop-title" aria-hidden="true">Arrastrá un .mp4 acá</p>
+      <p class="drop-sub" aria-hidden="true">o hacé click para elegir · el pipeline corre en background</p>
+    </section>
+    <section id="onboarding" class="onboarding hidden" aria-label="Cómo funciona Clippy">
+      <h2>Cómo funciona</h2>
+      <ol class="steps">
+        <li class="step">
+          <span class="step-num" aria-hidden="true">1</span>
+          <div class="step-body">
+            <p class="step-title">Subí tu grabación</p>
+            <p class="step-desc">Arrastrá un .mp4 de tu clase o stream. El pipeline arranca solo en background.</p>
+          </div>
+        </li>
+        <li class="step">
+          <span class="step-num" aria-hidden="true">2</span>
+          <div class="step-body">
+            <p class="step-title">Se procesa</p>
+            <p class="step-desc">Clippy transcribe el audio, analiza señales y detecta los clips con más potencial.</p>
+          </div>
+        </li>
+        <li class="step">
+          <span class="step-num" aria-hidden="true">3</span>
+          <div class="step-body">
+            <p class="step-title">Revisás y ajustás</p>
+            <p class="step-desc">Aprobás, rechazás o editás cada clip: recorte, encuadre y subtítulos.</p>
+          </div>
+        </li>
+        <li class="step">
+          <span class="step-num" aria-hidden="true">4</span>
+          <div class="step-body">
+            <p class="step-title">Renderizás</p>
+            <p class="step-desc">Exportás en 9:16 y 16:9 con subtítulos, listos para publicar.</p>
+          </div>
+        </li>
+      </ol>
+    </section>
+    <section id="jobs-section">
       <h2>Trabajos</h2>
       <div id="jobs-list" class="jobs-list"></div>
     </section>

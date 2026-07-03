@@ -1,5 +1,23 @@
 # Changelog
 
+## 2026-07-03 — Home de producto + onboarding (inbox)
+
+### Inbox como home
+- Hero sobrio con identidad y una línea de qué hace Clippy (sin CTA/pricing; es tool local).
+- Bloque "Cómo funciona" (4 pasos: subir → procesar → revisar → renderizar) que aparece
+  solo cuando no hay trabajos, como onboarding.
+- La sección "Trabajos" se oculta cuando está vacía (se evita el estado vacío redundante).
+
+## 2026-07-03 — Toasts tipados + dropzone accesible
+
+### Toasts
+- Tipos `success` / `error` / `info` con icono y color (borde izquierdo distintivo).
+- Errores usan `aria-live="assertive"` y duran más (5s vs 3s).
+- Timer único (se evita el bug de timeouts acumulados) + click para cerrar.
+
+### Accesibilidad
+- Dropzone ahora es `role="button"` enfocable, con soporte de Enter/Espacio y focus-ring.
+
 ## 2026-07-03 — Timeline highlight + deep-linking + i18n numbers
 
 ### Timeline semántico

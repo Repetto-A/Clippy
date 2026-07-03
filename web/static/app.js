@@ -62,13 +62,28 @@ function fmtNum(value, digits = 2) {
   return new Intl.NumberFormat(undefined, { maximumFractionDigits: digits }).format(n);
 }
 
-function toast(msg) {
+let _toastTimer = null;
+const _TOAST_ICONS = {
+  success: '<svg viewBox="0 0 20 20" aria-hidden="true"><path fill="currentColor" d="M8.2 13.2 4.9 9.9l1.2-1.2 2.1 2.1 5-5 1.2 1.2z"/></svg>',
+  error: '<svg viewBox="0 0 20 20" aria-hidden="true"><path fill="currentColor" d="M10 2a8 8 0 1 0 0 16 8 8 0 0 0 0-16Zm-1 4h2v6H9V6Zm0 8h2v2H9v-2Z"/></svg>',
+  info: '<svg viewBox="0 0 20 20" aria-hidden="true"><path fill="currentColor" d="M10 2a8 8 0 1 0 0 16 8 8 0 0 0 0-16ZM9 5h2v2H9V5Zm0 4h2v6H9V9Z"/></svg>',
+};
+
+function toast(msg, type = "info") {
   const el = $("toast");
-  el.textContent = msg;
-  el.classList.remove("hidden");
+  const kind = _TOAST_ICONS[type] ? type : "info";
+  el.className = `toast toast--${kind}`;
+  el.innerHTML = `<span class="toast-icon" aria-hidden="true">${_TOAST_ICONS[kind]}</span><span class="toast-msg"></span>`;
+  el.querySelector(".toast-msg").textContent = msg;
+  el.setAttribute("aria-live", kind === "error" ? "assertive" : "polite");
   const ann = $("status-announcer");
   if (ann) ann.textContent = msg;
-  setTimeout(() => el.classList.add("hidden"), 3000);
+  if (_toastTimer) clearTimeout(_toastTimer);
+  _toastTimer = setTimeout(() => el.classList.add("hidden"), kind === "error" ? 5000 : 3000);
+  el.onclick = () => {
+    if (_toastTimer) clearTimeout(_toastTimer);
+    el.classList.add("hidden");
+  };
 }
 
 async function withBusy(btn, busyLabel, fn) {
@@ -176,15 +191,17 @@ window.addEventListener("popstate", () => {
 async function loadJobs() {
   const jobs = await api("/jobs");
   const list = $("jobs-list");
+  const onboarding = $("onboarding");
+  const jobsSection = $("jobs-section");
   if (!jobs.length) {
-    list.innerHTML = emptyState(
-      "inbox",
-      "No hay trabajos todavía",
-      "Arrastrá un .mp4 a la zona de arriba o hacé click para subir tu primer video.",
-    );
+    if (onboarding) onboarding.classList.remove("hidden");
+    if (jobsSection) jobsSection.classList.add("hidden");
+    list.innerHTML = "";
     stopPoll();
     return;
   }
+  if (onboarding) onboarding.classList.add("hidden");
+  if (jobsSection) jobsSection.classList.remove("hidden");
   list.innerHTML = jobs.map((j) => {
     const badgeCls = stageBadgeClass(j.stage);
     return `
@@ -458,7 +475,7 @@ async function saveProposePrefs() {
   const minDur = parseFloat($("pref-min-duration").value);
   const maxDur = parseFloat($("pref-max-duration").value);
   if (minDur > maxDur) {
-    toast("La duración mínima no puede superar la máxima");
+    toast("La duración mínima no puede superar la máxima", "error");
     return;
   }
   try {
@@ -472,9 +489,9 @@ async function saveProposePrefs() {
         rank_finalists: parseInt($("pref-rank-finalists").value, 10) || 24,
       }),
     });
-    toast("Opciones de propuesta guardadas");
+    toast("Opciones de propuesta guardadas", "success");
   } catch (e) {
-    toast(e.message);
+    toast(e.message, "error");
   }
 }
 
@@ -529,7 +546,7 @@ async function saveRenderPrefs() {
   const vertical = $("pref-out-vertical").checked;
   const horizontal = $("pref-out-horizontal").checked;
   if (!vertical && !horizontal) {
-    toast("Elegí al menos un formato de salida");
+    toast("Elegí al menos un formato de salida", "error");
     $("pref-out-vertical").checked = true;
     return;
   }
@@ -544,10 +561,10 @@ async function saveRenderPrefs() {
         output_horizontal: horizontal,
       }),
     });
-    toast("Opciones guardadas");
+    toast("Opciones guardadas", "success");
     await loadCaptionPreview();
   } catch (e) {
-    toast(e.message);
+    toast(e.message, "error");
   }
 }
 
@@ -581,11 +598,11 @@ async function saveJobProfile() {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ profile: $("job-profile").value }),
     });
-    toast("Perfil actualizado");
+    toast("Perfil actualizado", "success");
     await loadProposePrefs();
     await loadRenderPrefs();
   } catch (e) {
-    toast(e.message);
+    toast(e.message, "error");
   }
 }
 
@@ -694,7 +711,7 @@ async function loadPerformanceReport() {
 async function importPerformance() {
   const raw = $("performance-import").value.trim();
   if (!raw) {
-    toast("Pegá JSON o CSV primero");
+    toast("Pegá JSON o CSV primero", "error");
     return;
   }
   const format = raw.startsWith("[") || raw.startsWith("{") ? "json" : "csv";
@@ -704,10 +721,10 @@ async function importPerformance() {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ format, data: raw }),
     });
-    toast("Metricas importadas");
+    toast("Metricas importadas", "success");
     await loadPerformanceReport();
   } catch (e) {
-    toast(e.message);
+    toast(e.message, "error");
   }
 }
 
@@ -925,11 +942,11 @@ function renderOutputs(clips) {
 $("btn-retry").onclick = async () => {
   try {
     await api(`/jobs/${enc(state.jobId)}/retry`, { method: "POST" });
-    toast("Procesamiento reiniciado");
+    toast("Procesamiento reiniciado", "success");
     startPoll();
     await refreshJob();
   } catch (e) {
-    toast(e.message);
+    toast(e.message, "error");
   }
 };
 
@@ -1228,7 +1245,7 @@ function zoomToClip() {
 async function openEditor(clipId) {
   const data = await api(`/jobs/${enc(state.jobId)}/candidates`);
   const clip = data.candidates.find((c) => c.id === clipId);
-  if (!clip) return toast("Clip no encontrado");
+  if (!clip) return toast("Clip no encontrado", "error");
   state.clip = clip;
   state.activeWord = -1;
   showView("editor");
@@ -1442,7 +1459,7 @@ async function saveRange() {
   });
   state.clip = clip;
   renderWords(clip.words || []);
-  toast("Rango guardado");
+  toast("Rango guardado", "success");
 }
 
 async function setClipStatus(status, { clipId, rejectionReason } = {}) {
@@ -1455,7 +1472,7 @@ async function setClipStatus(status, { clipId, rejectionReason } = {}) {
     if (!reason && state.view === "editor") {
       reason = $("reject-reason").value;
       if (!reason) {
-        toast("Elegí una razón de rechazo");
+        toast("Elegí una razón de rechazo", "error");
         return;
       }
     }
@@ -1482,7 +1499,7 @@ async function setClipStatus(status, { clipId, rejectionReason } = {}) {
     selectGridClip(clip.id, { focus: false });
   }
 
-  toast(status === "approved" ? "Clip aprobado" : "Clip rechazado");
+  toast(status === "approved" ? "Clip aprobado" : "Clip rechazado", "success");
   await refreshEval();
   if (status === "approved") await loadCaptionPreview();
 }
@@ -1553,20 +1570,20 @@ async function saveWord(index, text) {
       }
     );
     state.clip.words[index] = word;
-    toast("Palabra actualizada");
+    toast("Palabra actualizada", "success");
   } catch (e) {
-    toast(e.message);
+    toast(e.message, "error");
   }
 }
 
 $("btn-render").onclick = (e) => withBusy(e.currentTarget, "Iniciando render", async () => {
   try {
     await api(`/jobs/${enc(state.jobId)}/render`, { method: "POST" });
-    toast("Render iniciado");
+    toast("Render iniciado", "success");
     startPoll();
     setTimeout(refreshJob, 2000);
   } catch (err) {
-    toast(err.message);
+    toast(err.message, "error");
   }
 });
 
@@ -1575,11 +1592,11 @@ $("btn-repropose").onclick = (e) => {
   return withBusy(e.currentTarget, "Re-proponiendo", async () => {
     try {
       await api(`/jobs/${enc(state.jobId)}/repropose`, { method: "POST" });
-      toast("Re-proposición iniciada");
+      toast("Re-proposición iniciada", "success");
       startPoll();
       await refreshJob();
     } catch (err) {
-      toast(err.message);
+      toast(err.message, "error");
     }
   });
 };
@@ -1590,7 +1607,7 @@ $("btn-run-eval").onclick = (e) => withBusy(e.currentTarget, "Evaluando", async 
     toast(`Precisión@${rep.n}: ${fmtPct(rep.precision_at_n)}`);
     await refreshEval();
   } catch (err) {
-    toast(err.message);
+    toast(err.message, "error");
   }
 });
 
@@ -1598,6 +1615,12 @@ const dropzone = $("dropzone");
 const fileInput = $("file-input");
 
 dropzone.onclick = () => fileInput.click();
+dropzone.onkeydown = (e) => {
+  if (e.key === "Enter" || e.key === " ") {
+    e.preventDefault();
+    fileInput.click();
+  }
+};
 dropzone.ondragover = (e) => { e.preventDefault(); dropzone.classList.add("dragover"); };
 dropzone.ondragleave = () => dropzone.classList.remove("dragover");
 dropzone.ondrop = (e) => {
@@ -1611,7 +1634,7 @@ fileInput.onchange = () => {
 
 async function uploadFile(file) {
   if (!file.name.toLowerCase().endsWith(".mp4")) {
-    toast("Solo .mp4");
+    toast("Solo .mp4", "error");
     return;
   }
   toast(`Subiendo ${file.name}…`);
@@ -1619,11 +1642,11 @@ async function uploadFile(file) {
   fd.append("file", file);
   try {
     const job = await api("/jobs/upload", { method: "POST", body: fd });
-    toast("Procesamiento iniciado");
+    toast("Procesamiento iniciado", "success");
     await loadJobs();
     openJob(job.id);
   } catch (e) {
-    toast(e.message);
+    toast(e.message, "error");
   }
 }
 

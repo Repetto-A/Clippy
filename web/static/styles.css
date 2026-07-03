@@ -73,6 +73,66 @@ body.dragging { cursor: ew-resize; user-select: none; }
 }
 
 .view { max-width: 1100px; margin: 0 auto; padding: 1.5rem; }
+
+.inbox-hero { margin-bottom: 1.5rem; }
+.inbox-hero-title {
+  margin: 0 0 0.5rem;
+  font-size: 1.75rem;
+  font-weight: 600;
+  letter-spacing: -0.02em;
+  line-height: 1.2;
+  max-width: 34ch;
+}
+.inbox-hero-sub {
+  margin: 0;
+  color: var(--muted);
+  font-size: 1rem;
+  line-height: 1.55;
+  max-width: 60ch;
+  text-wrap: pretty;
+}
+
+.onboarding { margin: 1.75rem 0; }
+.steps {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
+  gap: 0.85rem;
+  counter-reset: step;
+}
+.step {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.75rem;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 1rem 1.1rem;
+}
+.step-num {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.75rem;
+  height: 1.75rem;
+  border-radius: 999px;
+  background: var(--accent-soft);
+  color: var(--accent);
+  font-size: 0.85rem;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+.step-body { min-width: 0; }
+.step-title { margin: 0 0 0.2rem; font-weight: 600; font-size: 0.95rem; }
+.step-desc { margin: 0; color: var(--muted); font-size: 0.85rem; line-height: 1.45; text-wrap: pretty; }
+
+@media (max-width: 480px) {
+  .inbox-hero-title { font-size: 1.4rem; }
+  .steps { grid-template-columns: 1fr; }
+}
 .view > section > h2,
 .candidates-section > h2 {
   font-size: 0.8rem;
@@ -116,7 +176,8 @@ input:focus-visible,
 .clip-card:focus-visible,
 .job-card:focus-visible,
 .word-chip:focus-visible,
-.subs-block:focus-visible {
+.subs-block:focus-visible,
+.dropzone:focus-visible {
   outline: none;
   box-shadow: var(--focus-ring);
 }
@@ -1064,16 +1125,35 @@ h1, h2, h3 { text-wrap: balance; }
   right: 1.5rem;
   left: auto;
   max-width: min(22rem, calc(100vw - 2rem));
+  display: flex;
+  align-items: flex-start;
+  gap: 0.6rem;
   background: var(--panel);
   border: 1px solid var(--border);
+  border-left: 3px solid var(--accent);
   padding: 0.75rem 1rem;
   border-radius: 8px;
   box-shadow: 0 8px 24px rgba(0,0,0,0.4);
   z-index: 100;
   font-size: 0.9rem;
   line-height: 1.4;
+  cursor: pointer;
   animation: toast-in 0.2s ease-out;
 }
+.toast-icon {
+  display: flex;
+  flex-shrink: 0;
+  color: var(--accent);
+  margin-top: 0.05rem;
+}
+.toast-icon svg { width: 1.15rem; height: 1.15rem; }
+.toast-msg { min-width: 0; word-break: break-word; }
+.toast--success { border-left-color: var(--ok); }
+.toast--success .toast-icon { color: var(--ok); }
+.toast--error { border-left-color: var(--danger); }
+.toast--error .toast-icon { color: var(--danger); }
+.toast--info { border-left-color: var(--accent); }
+.toast--info .toast-icon { color: var(--accent); }
 @media (max-width: 480px) {
   .toast { right: 1rem; bottom: 1rem; left: 1rem; max-width: none; }
 }
