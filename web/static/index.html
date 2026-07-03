@@ -3,15 +3,20 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Video Clipper</title>
+  <title>Clippy</title>
   <link rel="stylesheet" href="/styles.css" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
 </head>
 <body>
+  <a href="#main-content" class="skip-link">Saltar al contenido</a>
   <header class="topbar">
-    <div class="brand">Video Clipper</div>
+    <div class="brand" aria-label="Clippy">Clippy</div>
     <button id="btn-back" class="ghost hidden" type="button">← Volver</button>
   </header>
 
+  <div id="main-content">
   <main id="view-inbox" class="view">
     <section class="dropzone" id="dropzone">
       <input type="file" id="file-input" accept="video/mp4" hidden />
@@ -26,25 +31,88 @@
 
   <main id="view-job" class="view hidden">
     <div class="job-header">
-      <h1 id="job-title"></h1>
-      <div id="job-meta" class="meta"></div>
+      <div class="job-header-main">
+        <h1 id="job-title"></h1>
+        <div class="job-header-meta">
+          <span id="job-status-badge" class="status-badge hidden" aria-live="polite"></span>
+          <p id="job-meta" class="meta"></p>
+        </div>
+      </div>
       <div class="job-actions">
+        <button id="btn-repropose" class="ghost hidden" type="button">Re-proponer clips</button>
         <button id="btn-render" class="primary" type="button">Renderizar aprobados</button>
         <button id="btn-run-eval" class="ghost" type="button">Evaluar calidad</button>
         <button id="btn-retry" class="ghost hidden" type="button">Reintentar procesamiento</button>
       </div>
     </div>
+    <section id="propose-prefs-section" class="propose-prefs hidden">
+      <h2>Opciones de propuesta</h2>
+      <div class="prefs-grid">
+        <label class="pref-field">
+          <span>Clips objetivo</span>
+          <input id="pref-target-clips" type="number" min="1" max="50" value="12" />
+        </label>
+        <label class="pref-field">
+          <span>Duración mínima (s)</span>
+          <input id="pref-min-duration" type="number" min="5" max="300" step="1" value="15" />
+        </label>
+        <label class="pref-field">
+          <span>Duración máxima (s)</span>
+          <input id="pref-max-duration" type="number" min="10" max="600" step="1" value="60" />
+        </label>
+        <label class="pref-field">
+          <span>Finalistas rank</span>
+          <input id="pref-rank-finalists" type="number" min="1" max="100" value="24" />
+        </label>
+      </div>
+      <p class="hint">Se guarda por job y aplica al próximo propose o re-proponer.</p>
+    </section>
+    <section id="render-prefs-section" class="render-prefs hidden">
+      <h2>Opciones de export</h2>
+      <div class="prefs-grid">
+        <label class="pref-field">
+          <span>Subtítulos</span>
+          <select id="pref-caption-style">
+            <option value="karaoke">Karaoke (educativo)</option>
+            <option value="social">Social (Shorts/Reels)</option>
+            <option value="both">Ambos</option>
+          </select>
+        </label>
+        <label class="pref-field">
+          <span>Palabras por linea (social)</span>
+          <input id="pref-social-words" type="number" min="2" max="12" value="5" />
+        </label>
+        <label class="pref-check">
+          <input id="pref-out-vertical" type="checkbox" checked />
+          Vertical 9:16
+        </label>
+        <label class="pref-check">
+          <input id="pref-out-horizontal" type="checkbox" checked />
+          Horizontal 16:9
+        </label>
+      </div>
+      <div id="caption-preview-panel" class="caption-preview">
+        <div class="caption-preview-heading">Vista previa de subtítulos</div>
+        <div id="caption-preview-content" class="caption-preview-content">
+          <p class="meta">Aprobá un clip para ver el estilo.</p>
+        </div>
+      </div>
+      <p class="hint">Se guarda por job y aplica al próximo render.</p>
+    </section>
     <section id="eval-section" class="eval-section hidden">
-      <h2>Evaluacion (M1)</h2>
+      <h2>Evaluación (M1)</h2>
       <div id="eval-stats" class="eval-stats meta"></div>
-      <p id="eval-hint" class="hint">Aproba o rechaza clips con razon para construir el golden set.</p>
+      <p id="eval-hint" class="hint">Aprobá o rechazá clips con razón para construir el golden set.</p>
     </section>
     <section id="renders-section" class="hidden">
       <h2>Clips renderizados</h2>
       <div id="renders-list" class="renders-list"></div>
     </section>
-    <h2>Candidatos</h2>
-    <div id="clips-list" class="clips-grid"></div>
+    <section class="candidates-section">
+      <h2>Candidatos</h2>
+      <p class="hint grid-shortcuts-hint">Atajos: <kbd>J</kbd>/<kbd>K</kbd> navegar · <kbd>A</kbd> aprobar · <kbd>R</kbd> rechazar</p>
+      <div id="clips-list" class="clips-grid" role="list"></div>
+    </section>
   </main>
 
   <main id="view-editor" class="view hidden editor-view">
@@ -52,11 +120,12 @@
       <div>
         <h1 id="editor-clip-title">Clip</h1>
         <p id="editor-clip-meta" class="meta"></p>
+        <div id="editor-rubric" class="rubric-bars hidden"></div>
       </div>
       <div class="clip-actions">
-        <select id="reject-reason" class="reject-reason" title="Razon si rechazas">
-          <option value="">Razon de rechazo...</option>
-          <option value="bad_hook">Hook debil</option>
+        <select id="reject-reason" class="reject-reason" title="Razón si rechazás">
+          <option value="">Razón de rechazo…</option>
+          <option value="bad_hook">Hook débil</option>
           <option value="not_self_contained">No autocontenido</option>
           <option value="bad_cut">Corte malo</option>
           <option value="dirty_screen">Pantalla sucia</option>
@@ -154,8 +223,10 @@
       <span>[ / ] nudge in/out</span>
     </aside>
   </main>
+  </div>
 
-  <div id="toast" class="toast hidden"></div>
+  <div id="status-announcer" class="sr-only" role="status" aria-live="polite"></div>
+  <div id="toast" class="toast hidden" role="status" aria-live="polite"></div>
   <script src="/app.js"></script>
 </body>
 </html>

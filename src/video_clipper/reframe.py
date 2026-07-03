@@ -7,6 +7,7 @@ y solo refina la posición del tile de webcam (fallback: región de config).
 
 from __future__ import annotations
 
+import statistics
 from pathlib import Path
 
 from rich.console import Console
@@ -63,16 +64,22 @@ def build_vertical_filter(layout: Layout, webcam: WebcamRegion | None = None) ->
     )
 
 
-def detect_webcam_region(source: Path, t: float) -> WebcamRegion:
-    """Refina la región de webcam detectando la cara en un frame (opcional).
+def _median_region(regions: list[WebcamRegion]) -> WebcamRegion:
+    return WebcamRegion(
+        x=round(statistics.median([r.x for r in regions]), 4),
+        y=round(statistics.median([r.y for r in regions]), 4),
+        w=round(statistics.median([r.w for r in regions]), 4),
+        h=round(statistics.median([r.h for r in regions]), 4),
+    )
 
-    Si opencv/mediapipe no están instalados o no se detecta cara, devuelve el default.
-    """
+
+def _detect_webcam_at(source: Path, t: float) -> WebcamRegion | None:
+    """Detecta la region de webcam en un frame. None si no hay cara o faltan deps."""
     try:
         import cv2  # type: ignore
         import mediapipe as mp  # type: ignore
     except ImportError:
-        return settings.webcam
+        return None
 
     import tempfile
 
@@ -86,19 +93,47 @@ def detect_webcam_region(source: Path, t: float) -> WebcamRegion:
         ])
         img = cv2.imread(str(frame_path))
         if img is None:
-            return settings.webcam
-        h, w = img.shape[:2]
+            return None
         with mp.solutions.face_detection.FaceDetection(model_selection=1, min_detection_confidence=0.5) as fd:
             res = fd.process(cv2.cvtColor(img, cv2.COLOR_BGR2RGB))
         if not res.detections:
-            return settings.webcam
-        # Tomar la detección más a la derecha (el tile de webcam suele estar a la derecha)
+            return None
+        # Tomar la deteccion mas a la derecha (el tile de webcam suele estar a la derecha)
         best = max(res.detections, key=lambda d: d.location_data.relative_bounding_box.xmin)
         box = best.location_data.relative_bounding_box
-        # Expandir alrededor de la cara para encuadrar el tile completo
         pad_x, pad_y = box.width * 0.9, box.height * 0.9
         x = max(0.0, box.xmin - pad_x / 2)
         y = max(0.0, box.ymin - pad_y / 2)
         rw = min(1.0 - x, box.width + pad_x)
         rh = min(1.0 - y, box.height + pad_y)
         return WebcamRegion(x=round(x, 4), y=round(y, 4), w=round(rw, 4), h=round(rh, 4))
+
+
+def detect_webcam_region(
+    source: Path,
+    start: float,
+    end: float | None = None,
+    *,
+    samples: int | None = None,
+) -> WebcamRegion:
+    """Refina la region de webcam detectando caras en varios frames del clip.
+
+    Muestrea N frames entre start y end y usa la mediana de las detecciones para
+    estabilizar el crop cuando el tile de Meet se mueve levemente.
+    """
+    n = max(1, samples or settings.webcam_detect_samples)
+    if end is None or end <= start + 0.5 or n == 1:
+        return _detect_webcam_at(source, start) or settings.webcam
+
+    times = [start + (end - start) * i / max(1, n - 1) for i in range(n)]
+    hits: list[WebcamRegion] = []
+    for t in times:
+        region = _detect_webcam_at(source, t)
+        if region is not None:
+            hits.append(region)
+
+    if not hits:
+        return settings.webcam
+    if len(hits) == 1:
+        return hits[0]
+    return _median_region(hits)

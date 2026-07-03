@@ -10,7 +10,7 @@ class FakeScorer:
     def __init__(self, cands):
         self.cands = cands
 
-    def propose(self, transcript, signals):
+    def propose(self, transcript, signals, *, propose_prefs=None):
         return self.cands
 
 

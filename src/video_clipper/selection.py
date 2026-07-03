@@ -5,7 +5,7 @@ from __future__ import annotations
 from rich.console import Console
 
 from .clip_utils import clamp_range, sync_clip_words, transcript_text, words_in_range
-from .config import settings
+from .propose_prefs import ProposePrefs, default_propose_prefs
 from .models import ClipCandidate, Layout, Signals, Transcript
 
 console = Console()
@@ -45,7 +45,10 @@ def refine(
     candidates: list[ClipCandidate],
     transcript: Transcript,
     signals: Signals,
+    *,
+    propose_prefs: ProposePrefs | None = None,
 ) -> list[ClipCandidate]:
+    prefs = propose_prefs or default_propose_prefs()
     silence_starts = [s.start for s in signals.silences]
 
     refined: list[ClipCandidate] = []
@@ -54,10 +57,10 @@ def refine(
         # out-point snaps to a nearby silence so the clip breathes at the close.
         start = c.start
         end = _snap(c.end, silence_starts, window=1.5)
-        if end - start < settings.min_duration:
-            end = start + settings.min_duration
-        if end - start > settings.max_duration:
-            end = start + settings.max_duration
+        if end - start < prefs.min_duration:
+            end = start + prefs.min_duration
+        if end - start > prefs.max_duration:
+            end = start + prefs.max_duration
 
         start, end = clamp_range(start, end, transcript.duration)
 
@@ -79,7 +82,7 @@ def refine(
     for c in refined:
         if all(not _overlaps(c, s) for s in selected):
             selected.append(c)
-        if len(selected) >= settings.target_clips:
+        if len(selected) >= prefs.target_clips:
             break
 
     selected.sort(key=lambda x: x.start)

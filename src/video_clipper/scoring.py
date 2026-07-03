@@ -15,6 +15,7 @@ from rich.console import Console
 
 from .clip_utils import clamp_range
 from .config import settings
+from .propose_prefs import ProposePrefs, default_propose_prefs
 from .models import ClipCandidate, Segment, Signals, Transcript
 from .router import get_router
 from .transcript_chunks import chunk_segments, clips_target_for_chunk, lines_from_segments
@@ -31,7 +32,13 @@ _KEYWORDS = {
 
 
 class MomentScorer(Protocol):
-    def propose(self, transcript: Transcript, signals: Signals) -> list[ClipCandidate]: ...
+    def propose(
+        self,
+        transcript: Transcript,
+        signals: Signals,
+        *,
+        propose_prefs: ProposePrefs | None = None,
+    ) -> list[ClipCandidate]: ...
 
 
 def _new_id() -> str:
@@ -41,7 +48,14 @@ def _new_id() -> str:
 class HeuristicScorer:
     """Baseline sin API: ventanas de frases consecutivas puntuadas por features simples."""
 
-    def propose(self, transcript: Transcript, signals: Signals) -> list[ClipCandidate]:
+    def propose(
+        self,
+        transcript: Transcript,
+        signals: Signals,
+        *,
+        propose_prefs: ProposePrefs | None = None,
+    ) -> list[ClipCandidate]:
+        prefs = propose_prefs or default_propose_prefs()
         segs = transcript.segments
         candidates: list[ClipCandidate] = []
 
@@ -50,9 +64,9 @@ class HeuristicScorer:
             for j in range(i, len(segs)):
                 acc.append(segs[j])
                 dur = acc[-1].end - acc[0].start
-                if dur < settings.min_duration:
+                if dur < prefs.min_duration:
                     continue
-                if dur > settings.max_duration:
+                if dur > prefs.max_duration:
                     break
                 start, end = acc[0].start, acc[-1].end
                 text = " ".join(s.text for s in acc)
@@ -98,11 +112,23 @@ class LLMScorer:
     def __init__(self) -> None:
         self.router = get_router()
 
-    def propose(self, transcript: Transcript, signals: Signals) -> list[ClipCandidate]:
-        chunks = chunk_segments(transcript.segments, settings.llm_chunk_chars)
+    def propose(
+        self,
+        transcript: Transcript,
+        signals: Signals,
+        *,
+        propose_prefs: ProposePrefs | None = None,
+    ) -> list[ClipCandidate]:
+        prefs = propose_prefs or default_propose_prefs()
+        chunks = chunk_segments(
+            transcript.segments,
+            settings.llm_chunk_chars,
+            silences=signals.silences,
+            overlap_segments=settings.chunk_overlap_segments,
+        )
         if len(chunks) <= 1:
             console.log("[cyan]LLM[/]: pidiendo momentos al modelo...")
-            raw = self._score_chunk(chunks[0], transcript, signals, settings.target_clips)
+            raw = self._score_chunk(chunks[0], transcript, signals, prefs.target_clips, prefs)
         else:
             console.log(
                 f"[cyan]LLM[/]: transcript largo -> {len(chunks)} chunks "
@@ -111,12 +137,12 @@ class LLMScorer:
             raw: list[ClipCandidate] = []
             for i, chunk in enumerate(chunks):
                 n = clips_target_for_chunk(
-                    i, len(chunks), settings.target_clips, settings.llm_clips_per_chunk,
+                    i, len(chunks), prefs.target_clips, settings.llm_clips_per_chunk,
                 )
                 t0 = chunk[0].start if chunk else 0
                 t1 = chunk[-1].end if chunk else 0
                 console.log(f"  chunk {i + 1}/{len(chunks)} ({t0 / 60:.0f}-{t1 / 60:.0f} min, hasta {n} clips)")
-                raw.extend(self._score_chunk(chunk, transcript, signals, n))
+                raw.extend(self._score_chunk(chunk, transcript, signals, n, prefs))
 
         raw.sort(key=lambda x: x.score, reverse=True)
         console.log(f"[green]LLM[/]: {len(raw)} momentos propuestos (pre-selección)")
@@ -128,14 +154,16 @@ class LLMScorer:
         transcript: Transcript,
         signals: Signals,
         target: int,
+        prefs: ProposePrefs,
     ) -> list[ClipCandidate]:
         result = self.router.run(
             "score_moments",
             {
                 "transcript_lines": lines_from_segments(segments),
-                "min_duration": settings.min_duration,
-                "max_duration": settings.max_duration,
+                "min_duration": prefs.min_duration,
+                "max_duration": prefs.max_duration,
                 "target_clips": target,
+                "dirty_ranges": [(r.start, r.end) for r in signals.dirty_segments],
             },
         )
         out: list[ClipCandidate] = []

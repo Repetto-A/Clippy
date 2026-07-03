@@ -7,11 +7,12 @@ from pathlib import Path
 from urllib.parse import unquote
 
 from .. import job_status, storage
-from ..clip_utils import clamp_range, sync_clip_words
+from ..clip_utils import clamp_range, clip_words, sync_clip_words
 from ..config import settings
 from ..models import ClipStatus, JobStage, Layout, RejectionReason
 from ..review import record_golden
-from ..pipeline import run_all, stage_render
+from ..captions import caption_preview_samples
+from ..pipeline import run_all, stage_propose, stage_render
 
 _lock = threading.Lock()
 _running: set[str] = set()
@@ -192,6 +193,33 @@ def start_render(job_id: str) -> None:
     threading.Thread(target=_render, daemon=True).start()
 
 
+def start_repropose(job_id: str) -> None:
+    """Re-run scan+rank+refine using existing transcript/signals."""
+    src = source_path(job_id)
+    if src is None:
+        raise FileNotFoundError("No se encontro el video fuente del job")
+    wd = workdir_for(job_id)
+    for name in ("transcript.json", "signals.json"):
+        if not (wd / name).exists():
+            raise FileNotFoundError(f"Falta {name}; corre el pipeline completo primero")
+    with _lock:
+        if job_id in _running:
+            raise RuntimeError("Job ocupado con otra tarea")
+        _running.add(job_id)
+
+    def _repropose() -> None:
+        try:
+            candidates_path = wd / "candidates.json"
+            if candidates_path.exists():
+                candidates_path.unlink()
+            stage_propose(src, track=True)
+        finally:
+            with _lock:
+                _running.discard(job_id)
+
+    threading.Thread(target=_repropose, daemon=True).start()
+
+
 def clip_output_path(job_id: str, clip_id: str, fmt: str) -> Path | None:
     """fmt: '9x16' o '16x9'."""
     cset = get_candidates(job_id)
@@ -229,3 +257,92 @@ def get_golden_summary(job_id: str) -> dict:
     approved = len(gs.approved())
     rejected = len(gs.rejected())
     return {"approved": approved, "rejected": rejected, "total": approved + rejected}
+
+
+def get_render_prefs(job_id: str):
+    wd = workdir_for(job_id)
+    if not wd.is_dir():
+        return None
+    return storage.load_render_prefs(wd)
+
+
+def patch_render_prefs(job_id: str, patch) -> object | None:
+    wd = workdir_for(job_id)
+    if not wd.is_dir():
+        return None
+    current = storage.load_render_prefs(wd)
+    data = patch.model_dump(exclude_unset=True)
+    updated = current.model_copy(update=data)
+    storage.save_render_prefs(updated, wd)
+    return updated
+
+
+def get_caption_preview(job_id: str) -> dict | None:
+    """Texto de ejemplo del primer clip aprobado según render_prefs."""
+    wd = workdir_for(job_id)
+    if not wd.is_dir():
+        return None
+    cset = get_candidates(job_id)
+    if cset is None:
+        return None
+
+    approved = [
+        c for c in cset.candidates
+        if c.status in (ClipStatus.APPROVED, ClipStatus.EDITED)
+    ]
+    if not approved:
+        return {
+            "clip_id": None,
+            "clip_title": None,
+            "previews": [],
+            "message": "Aprobá un clip para ver el estilo de subtítulos.",
+        }
+
+    clip = approved[0]
+    transcript = storage.load_transcript(wd) if (wd / "transcript.json").exists() else None
+    if transcript is not None:
+        words = clip_words(clip, transcript)
+    else:
+        words = clip.words or []
+
+    if not words:
+        return {
+            "clip_id": clip.id,
+            "clip_title": clip.title or clip.id,
+            "previews": [],
+            "message": "El clip no tiene palabras en el rango.",
+        }
+
+    prefs = storage.load_render_prefs(wd)
+    previews = caption_preview_samples(
+        words,
+        clip.start,
+        caption_style=prefs.caption_style,
+        max_words=prefs.caption_social_max_words,
+    )
+    return {
+        "clip_id": clip.id,
+        "clip_title": clip.title or clip.id,
+        "previews": previews,
+        "message": None,
+    }
+
+
+def get_propose_prefs(job_id: str):
+    wd = workdir_for(job_id)
+    if not wd.is_dir():
+        return None
+    return storage.load_propose_prefs(wd)
+
+
+def patch_propose_prefs(job_id: str, patch) -> object | None:
+    from ..propose_prefs import ProposePrefs
+
+    wd = workdir_for(job_id)
+    if not wd.is_dir():
+        return None
+    current = storage.load_propose_prefs(wd)
+    data = patch.model_dump(exclude_unset=True)
+    updated = ProposePrefs.model_validate({**current.model_dump(), **data})
+    storage.save_propose_prefs(updated, wd)
+    return updated

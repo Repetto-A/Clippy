@@ -101,6 +101,10 @@ class Settings(BaseModel):
 
     # Render
     use_nvenc: bool = _get("VC_NVENC", "1") == "1"
+    webcam_detect_samples: int = _get_int("VC_WEBCAM_DETECT_SAMPLES", 5)
+    # Subtitulos: karaoke (default) | social (CapCut/Reels) | both
+    caption_style: str = _get("VC_CAPTION_STYLE", "karaoke")
+    caption_social_max_words: int = _get_int("VC_CAPTION_SOCIAL_WORDS", 5)
 
     # Layout
     webcam: WebcamRegion = WebcamRegion()

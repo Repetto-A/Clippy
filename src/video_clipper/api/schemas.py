@@ -56,6 +56,48 @@ class EvalReportResponse(BaseModel):
     has_baseline: bool = False
 
 
+class RenderPrefsResponse(BaseModel):
+    caption_style: str
+    caption_social_max_words: int
+    output_vertical: bool
+    output_horizontal: bool
+
+
+class RenderPrefsPatch(BaseModel):
+    caption_style: str | None = None
+    caption_social_max_words: int | None = Field(default=None, ge=2, le=12)
+    output_vertical: bool | None = None
+    output_horizontal: bool | None = None
+
+
+class CaptionStylePreview(BaseModel):
+    style: str
+    style_label: str
+    font: str
+    sample_lines: list[str] = Field(default_factory=list)
+
+
+class CaptionPreviewResponse(BaseModel):
+    clip_id: str | None = None
+    clip_title: str | None = None
+    previews: list[CaptionStylePreview] = Field(default_factory=list)
+    message: str | None = None
+
+
+class ProposePrefsResponse(BaseModel):
+    target_clips: int
+    min_duration: float
+    max_duration: float
+    rank_finalists: int
+
+
+class ProposePrefsPatch(BaseModel):
+    target_clips: int | None = Field(default=None, ge=1, le=50)
+    min_duration: float | None = Field(default=None, ge=5.0, le=300.0)
+    max_duration: float | None = Field(default=None, ge=10.0, le=600.0)
+    rank_finalists: int | None = Field(default=None, ge=1, le=100)
+
+
 class WordPatch(BaseModel):
     text: str
 

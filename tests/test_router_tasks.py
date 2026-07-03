@@ -34,3 +34,5 @@ def test_rank_prompt_asks_for_all_subscores():
     )
     for field in ("hook_strength", "self_contained", "takeaway_clarity", "payoff"):
         assert field in user
+    assert "NO deben solaparse" in user
+    assert "mismo id" in user

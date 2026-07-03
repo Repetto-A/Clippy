@@ -72,6 +72,42 @@ def load_eval_report(workdir: Path):
     return EvalReport.model_validate_json(p.read_text(encoding="utf-8"))
 
 
+def save_render_prefs(prefs, workdir: Path) -> Path:
+    from .render_prefs import RenderPrefs
+
+    p = workdir / "render_prefs.json"
+    data = prefs if isinstance(prefs, RenderPrefs) else RenderPrefs.model_validate(prefs)
+    p.write_text(data.model_dump_json(indent=2), encoding="utf-8")
+    return p
+
+
+def load_render_prefs(workdir: Path):
+    from .render_prefs import RenderPrefs, default_render_prefs
+
+    p = workdir / "render_prefs.json"
+    if not p.exists():
+        return default_render_prefs()
+    return RenderPrefs.model_validate_json(p.read_text(encoding="utf-8"))
+
+
+def save_propose_prefs(prefs, workdir: Path) -> Path:
+    from .propose_prefs import ProposePrefs
+
+    p = workdir / "propose_prefs.json"
+    data = prefs if isinstance(prefs, ProposePrefs) else ProposePrefs.model_validate(prefs)
+    p.write_text(data.model_dump_json(indent=2), encoding="utf-8")
+    return p
+
+
+def load_propose_prefs(workdir: Path):
+    from .propose_prefs import ProposePrefs, default_propose_prefs
+
+    p = workdir / "propose_prefs.json"
+    if not p.exists():
+        return default_propose_prefs()
+    return ProposePrefs.model_validate_json(p.read_text(encoding="utf-8"))
+
+
 def save_job_status(j: JobStatusRecord, workdir: Path) -> Path:
     p = workdir / "status.json"
     p.write_text(j.model_dump_json(indent=2), encoding="utf-8")

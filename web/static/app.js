@@ -11,12 +11,16 @@ const state = {
   jobId: null,
   job: null,
   clip: null,
+  candidates: [],
+  selectedClipId: null,
   duration: 0,
   pollTimer: null,
   activeWord: -1,
   editingWord: -1,
   drag: null,
   editorBound: false,
+  prefsBound: false,
+  gridBound: false,
   timelineZoom: 1,
 };
 
@@ -40,6 +44,8 @@ function toast(msg) {
   const el = $("toast");
   el.textContent = msg;
   el.classList.remove("hidden");
+  const ann = $("status-announcer");
+  if (ann) ann.textContent = msg;
   setTimeout(() => el.classList.add("hidden"), 3000);
 }
 
@@ -85,28 +91,40 @@ async function loadJobs() {
   const jobs = await api("/jobs");
   const list = $("jobs-list");
   if (!jobs.length) {
-    list.innerHTML = `<p class="meta">No hay trabajos todavía.</p>`;
+    list.innerHTML = emptyState(
+      "📂",
+      "No hay trabajos todavía",
+      "Arrastrá un .mp4 a la zona de arriba o hacé click para subir tu primer video.",
+    );
     return;
   }
   list.innerHTML = jobs.map((j) => {
-    const cls = j.stage === "failed" ? "stage-failed"
-      : j.stage === "ready_for_review" || j.stage === "completed" ? "stage-ready"
-      : ACTIVE.has(j.stage) ? "stage-working" : "";
+    const badgeCls = stageBadgeClass(j.stage);
     return `
-      <article class="job-card" data-id="${escapeAttr(j.id)}">
+      <article class="job-card" data-id="${escapeAttr(j.id)}" tabindex="0" role="button" aria-label="Abrir ${escapeAttr(j.name)}">
         <div class="job-card-head">
           <div>
             <div class="job-name">${escapeHtml(j.name)}</div>
-            <div class="job-stage ${cls}">${stageLabel(j.stage)} · ${j.message}</div>
+            <div class="job-stage">${escapeHtml(j.message)}</div>
           </div>
-          <div>${Math.round(j.progress)}%</div>
+          <div class="job-card-badges">
+            <span class="status-badge ${badgeCls}">${stageLabel(j.stage)}</span>
+            <span class="job-progress-pct">${Math.round(j.progress)}%</span>
+          </div>
         </div>
         <div class="progress-bar"><div class="progress-fill" style="width:${j.progress}%"></div></div>
       </article>`;
   }).join("");
 
   list.querySelectorAll(".job-card").forEach((el) => {
-    el.onclick = () => openJob(el.dataset.id);
+    const open = () => openJob(el.dataset.id);
+    el.onclick = open;
+    el.onkeydown = (e) => {
+      if (e.key === "Enter" || e.key === " ") {
+        e.preventDefault();
+        open();
+      }
+    };
   });
 
   if (jobs.some((j) => ACTIVE.has(j.stage))) startPoll();
@@ -128,11 +146,80 @@ function stageLabel(s) {
   return map[s] || s;
 }
 
+function stageBadgeClass(s) {
+  if (s === "failed") return "status-failed";
+  if (s === "ready_for_review" || s === "completed") return "status-ready";
+  if (ACTIVE.has(s)) return "status-working";
+  return "status-neutral";
+}
+
+function statusLabel(s) {
+  const map = {
+    proposed: "Propuesto",
+    approved: "Aprobado",
+    rejected: "Rechazado",
+    edited: "Editado",
+  };
+  return map[s] || s;
+}
+
+function statusBadgeClass(s) {
+  if (s === "approved") return "badge-approved";
+  if (s === "rejected") return "badge-rejected";
+  if (s === "edited") return "badge-edited";
+  return "badge-proposed";
+}
+
+function emptyState(icon, title, desc, { compact = false } = {}) {
+  return `<div class="empty-state${compact ? " compact" : ""}">
+    <div class="empty-state-icon" aria-hidden="true">${icon}</div>
+    <p class="empty-state-title">${title}</p>
+    <p class="empty-state-desc">${desc}</p>
+  </div>`;
+}
+
 function escapeHtml(s) {
   return String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 }
 function escapeAttr(s) {
   return escapeHtml(s).replace(/"/g, "&quot;");
+}
+
+function hasRubric(c) {
+  return (c.hook_strength || c.self_contained || c.takeaway_clarity || c.payoff) > 0;
+}
+
+function rubricHtml(c) {
+  if (!hasRubric(c)) return "";
+  const items = [
+    ["Hook", c.hook_strength],
+    ["Autocontenido", c.self_contained],
+    ["Takeaway", c.takeaway_clarity],
+    ["Remate", c.payoff],
+  ];
+  return items.map(([label, val]) => `
+    <div class="rubric-row">
+      <span class="rubric-label">${label}</span>
+      <div class="rubric-bar"><div class="rubric-fill" style="width:${Math.round(val)}%"></div></div>
+      <span class="rubric-val">${Math.round(val)}</span>
+    </div>`).join("");
+}
+
+function clipMetaLine(c) {
+  const base = `${fmtTime(c.start)} – ${fmtTime(c.end)} · ${Math.round(c.end - c.start)}s · puntaje ${Math.round(c.score)}`;
+  if (!hasRubric(c)) return base;
+  return `${base}<br><span class="rubric-mini">H${Math.round(c.hook_strength)} · S${Math.round(c.self_contained)} · T${Math.round(c.takeaway_clarity)} · P${Math.round(c.payoff)}</span>`;
+}
+
+function updateJobHeader(job) {
+  $("job-title").textContent = job.name;
+  const badge = $("job-status-badge");
+  badge.textContent = stageLabel(job.stage);
+  badge.className = `status-badge ${stageBadgeClass(job.stage)}`;
+  badge.classList.remove("hidden");
+  const parts = [job.message];
+  if (job.clip_count != null) parts.push(`${job.clip_count} clips`);
+  $("job-meta").textContent = parts.join(" · ");
 }
 
 function startPoll() {
@@ -157,12 +244,54 @@ async function refreshJob() {
   const job = await api(`/jobs/${enc(state.jobId)}`);
   state.job = job;
   state.duration = job.duration || 0;
-  $("job-title").textContent = job.name;
-  $("job-meta").textContent = `${stageLabel(job.stage)} · ${job.message}${job.clip_count != null ? ` · ${job.clip_count} clips` : ""}`;
+  updateJobHeader(job);
   $("btn-retry").classList.toggle("hidden", job.stage !== "failed");
+  $("btn-repropose").classList.toggle(
+    "hidden",
+    !["ready_for_review", "completed"].includes(job.stage) || ACTIVE.has(job.stage),
+  );
+
+  if (ACTIVE.has(job.stage)) {
+    const banner = `
+      <div class="job-progress-banner">
+        <div class="meta">${stageLabel(job.stage)} · ${escapeHtml(job.message)}</div>
+        <div class="progress-bar"><div class="progress-fill" style="width:${job.progress}%"></div></div>
+      </div>`;
+    if (job.stage === "rendering" || job.stage === "proposing") {
+      try {
+        const data = await api(`/jobs/${enc(state.jobId)}/candidates`);
+        $("clips-list").innerHTML = banner + renderClipsHtml(data.candidates);
+      } catch {
+        $("clips-list").innerHTML = banner + emptyState(
+          "⏳",
+          "Procesando video",
+          `Etapa actual: ${stageLabel(job.stage)} · ${Math.round(job.progress)}% completado.`,
+          { compact: true },
+        );
+      }
+    } else {
+      $("clips-list").innerHTML = banner + emptyState(
+        "⏳",
+        "Procesando video",
+        `Etapa actual: ${stageLabel(job.stage)} · ${Math.round(job.progress)}% completado.`,
+        { compact: true },
+      );
+    }
+    $("renders-section").classList.add("hidden");
+    $("eval-section").classList.add("hidden");
+    $("propose-prefs-section").classList.add("hidden");
+    $("render-prefs-section").classList.add("hidden");
+    startPoll();
+    return;
+  }
 
   if (job.stage !== "ready_for_review" && job.stage !== "completed") {
-    $("clips-list").innerHTML = `<p class="meta">Todavía procesando… (${Math.round(job.progress)}%)</p>`;
+    $("clips-list").innerHTML = emptyState(
+      "⏳",
+      "Todavía procesando",
+      `${Math.round(job.progress)}% completado. Los candidatos aparecerán acá cuando estén listos.`,
+      { compact: true },
+    );
     $("renders-section").classList.add("hidden");
     if (ACTIVE.has(job.stage)) startPoll();
     return;
@@ -173,11 +302,210 @@ async function refreshJob() {
     renderClips(data.candidates);
     renderOutputs(data.candidates);
     await refreshEval();
+    await loadProposePrefs();
+    await loadRenderPrefs();
   } catch {
-    $("clips-list").innerHTML = `<p class="meta">Clips aún no disponibles.</p>`;
+    $("clips-list").innerHTML = emptyState(
+      "📋",
+      "Clips aún no disponibles",
+      "El pipeline todavía no terminó de proponer candidatos. Volvé en unos segundos.",
+      { compact: true },
+    );
     $("renders-section").classList.add("hidden");
     $("eval-section").classList.add("hidden");
   }
+}
+
+async function loadProposePrefs() {
+  const section = $("propose-prefs-section");
+  try {
+    const prefs = await api(`/jobs/${enc(state.jobId)}/propose-prefs`);
+    section.classList.remove("hidden");
+    $("pref-target-clips").value = prefs.target_clips;
+    $("pref-min-duration").value = prefs.min_duration;
+    $("pref-max-duration").value = prefs.max_duration;
+    $("pref-rank-finalists").value = prefs.rank_finalists;
+  } catch {
+    section.classList.add("hidden");
+  }
+}
+
+async function saveProposePrefs() {
+  if (!state.jobId) return;
+  const minDur = parseFloat($("pref-min-duration").value);
+  const maxDur = parseFloat($("pref-max-duration").value);
+  if (minDur > maxDur) {
+    toast("La duración mínima no puede superar la máxima");
+    return;
+  }
+  try {
+    await api(`/jobs/${enc(state.jobId)}/propose-prefs`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        target_clips: parseInt($("pref-target-clips").value, 10) || 12,
+        min_duration: minDur,
+        max_duration: maxDur,
+        rank_finalists: parseInt($("pref-rank-finalists").value, 10) || 24,
+      }),
+    });
+    toast("Opciones de propuesta guardadas");
+  } catch (e) {
+    toast(e.message);
+  }
+}
+
+function bindProposePrefsOnce() {
+  if (state.proposePrefsBound) return;
+  state.proposePrefsBound = true;
+  ["pref-target-clips", "pref-min-duration", "pref-max-duration", "pref-rank-finalists"].forEach((id) => {
+    $(id).addEventListener("change", saveProposePrefs);
+  });
+}
+
+async function loadRenderPrefs() {
+  const section = $("render-prefs-section");
+  try {
+    const prefs = await api(`/jobs/${enc(state.jobId)}/render-prefs`);
+    section.classList.remove("hidden");
+    $("pref-caption-style").value = prefs.caption_style;
+    $("pref-social-words").value = prefs.caption_social_max_words;
+    $("pref-out-vertical").checked = prefs.output_vertical;
+    $("pref-out-horizontal").checked = prefs.output_horizontal;
+    await loadCaptionPreview();
+  } catch {
+    section.classList.add("hidden");
+  }
+}
+
+async function loadCaptionPreview() {
+  const panel = $("caption-preview-content");
+  if (!panel || !state.jobId) return;
+  try {
+    const data = await api(`/jobs/${enc(state.jobId)}/caption-preview`);
+    if (!data.previews?.length) {
+      panel.innerHTML = `<p class="meta">${escapeHtml(data.message || "Aprobá un clip para ver el estilo de subtítulos.")}</p>`;
+      return;
+    }
+    const subtitle = data.clip_title
+      ? `<p class="caption-preview-source meta">Ejemplo desde: ${escapeHtml(data.clip_title)}</p>`
+      : "";
+    const blocks = data.previews.map((p) => `
+      <div class="caption-preview-block caption-preview-${p.style}">
+        <div class="caption-preview-style-label">${escapeHtml(p.style_label)} · ${escapeHtml(p.font)}</div>
+        ${p.sample_lines.map((line) => `<div class="caption-preview-line">${escapeHtml(line)}</div>`).join("")}
+      </div>`).join("");
+    panel.innerHTML = subtitle + blocks;
+  } catch {
+    panel.innerHTML = `<p class="meta">Vista previa no disponible.</p>`;
+  }
+}
+
+async function saveRenderPrefs() {
+  if (!state.jobId) return;
+  const vertical = $("pref-out-vertical").checked;
+  const horizontal = $("pref-out-horizontal").checked;
+  if (!vertical && !horizontal) {
+    toast("Elegí al menos un formato de salida");
+    $("pref-out-vertical").checked = true;
+    return;
+  }
+  try {
+    await api(`/jobs/${enc(state.jobId)}/render-prefs`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        caption_style: $("pref-caption-style").value,
+        caption_social_max_words: parseInt($("pref-social-words").value, 10) || 5,
+        output_vertical: vertical,
+        output_horizontal: horizontal,
+      }),
+    });
+    toast("Opciones guardadas");
+    await loadCaptionPreview();
+  } catch (e) {
+    toast(e.message);
+  }
+}
+
+function bindRenderPrefsOnce() {
+  if (state.prefsBound) return;
+  state.prefsBound = true;
+  ["pref-caption-style", "pref-social-words", "pref-out-vertical", "pref-out-horizontal"].forEach((id) => {
+    $(id).addEventListener("change", saveRenderPrefs);
+  });
+  $("pref-caption-style").addEventListener("change", loadCaptionPreview);
+  $("pref-social-words").addEventListener("change", loadCaptionPreview);
+}
+
+function getSelectedGridClipId() {
+  return state.selectedClipId || state.candidates[0]?.id || null;
+}
+
+function selectGridClip(clipId, { focus = true } = {}) {
+  state.selectedClipId = clipId;
+  const list = $("clips-list");
+  if (!list) return;
+  let card = null;
+  list.querySelectorAll(".clip-card").forEach((el) => {
+    const sel = el.dataset.id === clipId;
+    el.classList.toggle("selected", sel);
+    el.tabIndex = sel ? 0 : -1;
+    if (sel) {
+      card = el;
+      el.scrollIntoView({ block: "nearest", behavior: "smooth" });
+    }
+  });
+  if (focus && card) card.focus();
+}
+
+function navigateGrid(delta) {
+  if (!state.candidates.length) return;
+  let idx = state.candidates.findIndex((c) => c.id === state.selectedClipId);
+  if (idx < 0) idx = delta > 0 ? -1 : 0;
+  idx = (idx + delta + state.candidates.length) % state.candidates.length;
+  selectGridClip(state.candidates[idx].id);
+}
+
+function onGridKeydown(e) {
+  if (state.view !== "job") return;
+  if (e.ctrlKey || e.metaKey || e.altKey) return;
+  const tag = document.activeElement?.tagName;
+  if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT") return;
+
+  switch (e.key) {
+    case "j":
+    case "J":
+      e.preventDefault();
+      navigateGrid(1);
+      break;
+    case "k":
+    case "K":
+      e.preventDefault();
+      navigateGrid(-1);
+      break;
+    case "a":
+    case "A":
+      e.preventDefault();
+      setClipStatus("approved", { clipId: getSelectedGridClipId() });
+      break;
+    case "r":
+    case "R":
+      e.preventDefault();
+      setClipStatus("rejected", {
+        clipId: getSelectedGridClipId(),
+        rejectionReason: "bad_hook",
+      });
+      break;
+    default:
+      break;
+  }
+}
+
+function bindGridKeyboardOnce() {
+  if (state.gridBound) return;
+  state.gridBound = true;
+  document.addEventListener("keydown", onGridKeydown);
 }
 
 async function refreshEval() {
@@ -194,12 +522,26 @@ async function refreshEval() {
     $("eval-stats").innerHTML = golden.total
       ? `Golden set: ${golden.approved} aprobados, ${golden.rejected} rechazados`
         + (evalRep.n
-          ? ` · precision@${evalRep.n}: ${pct}% · recall: ${recall}%`
-          : " · corré Evaluar para medir")
-      : "Sin etiquetas todavía. Aproba/rechaza clips en el editor.";
+          ? ` · precisión@${evalRep.n}: ${pct}% · recall: ${recall}%`
+          : " · ejecutá Evaluar calidad para medir")
+      : "Sin etiquetas todavía. Aprobá o rechazá clips en el editor.";
   } catch {
     section.classList.add("hidden");
   }
+}
+
+function outputLabel(fmt) {
+  const labels = {
+    "9x16": "Vertical 9:16 (karaoke)",
+    "9x16_social": "Vertical 9:16 (social)",
+    "16x9": "Horizontal 16:9 (karaoke)",
+    "16x9_social": "Horizontal 16:9 (social)",
+  };
+  return labels[fmt] || fmt;
+}
+
+function previewFormat(outputs) {
+  return ["9x16", "9x16_social", "16x9", "16x9_social"].find((f) => outputs[f]);
 }
 
 function renderOutputs(clips) {
@@ -214,18 +556,18 @@ function renderOutputs(clips) {
   list.innerHTML = withOut.map((c) => {
     const links = Object.entries(c.outputs).map(([fmt]) => {
       const url = `/api/jobs/${enc(state.jobId)}/clips/${c.id}/output/${fmt}`;
-      const label = fmt === "9x16" ? "Vertical 9:16" : "Horizontal 16:9";
-      return `<a href="${url}" download target="_blank" rel="noopener">${label} ↓</a>`;
+      return `<a href="${url}" download target="_blank" rel="noopener">${outputLabel(fmt)} ↓</a>`;
     }).join("");
-    const preview = c.outputs["9x16"]
-      ? `/api/jobs/${enc(state.jobId)}/clips/${c.id}/output/9x16`
-      : `/api/jobs/${enc(state.jobId)}/clips/${c.id}/output/16x9`;
+    const pf = previewFormat(c.outputs);
+    const preview = pf
+      ? `/api/jobs/${enc(state.jobId)}/clips/${c.id}/output/${pf}`
+      : "";
     return `
       <article class="render-card">
         <div class="render-card-head">
           <div>
             <div class="clip-title">${escapeHtml(c.title || c.id)}</div>
-            <div class="clip-meta">${fmtTime(c.start)} – ${fmtTime(c.end)} · ${c.status}</div>
+            <div class="clip-meta">${fmtTime(c.start)} – ${fmtTime(c.end)} · ${statusLabel(c.status)}</div>
           </div>
           <div class="render-links">${links}</div>
         </div>
@@ -245,24 +587,63 @@ $("btn-retry").onclick = async () => {
   }
 };
 
-function renderClips(clips) {
-  const list = $("clips-list");
+function renderClipsHtml(clips) {
   if (!clips.length) {
-    list.innerHTML = `<p class="meta">Sin clips propuestos.</p>`;
-    return;
+    return emptyState(
+      "🎬",
+      "Sin clips propuestos",
+      "El motor no encontró candidatos en este video. Probá Re-proponer clips con otro umbral.",
+      { compact: true },
+    );
   }
-  list.innerHTML = clips.map((c) => `
-    <article class="clip-card" data-id="${c.id}">
+  return clips.map((c) => `
+    <article class="clip-card" data-id="${c.id}" tabindex="0" role="listitem">
       <div>
         <div class="clip-title">${escapeHtml(c.title || c.id)}</div>
-        <div class="clip-meta">${fmtTime(c.start)} – ${fmtTime(c.end)} · ${Math.round(c.end - c.start)}s · score ${Math.round(c.score)}</div>
+        <div class="clip-meta">${clipMetaLine(c)}</div>
       </div>
-      <span class="badge badge-${c.status}">${c.status}</span>
+      <span class="badge ${statusBadgeClass(c.status)}">${statusLabel(c.status)}</span>
     </article>
   `).join("");
-  list.querySelectorAll(".clip-card").forEach((el) => {
-    el.onclick = () => openEditor(el.dataset.id);
+}
+
+function bindClipCards(container) {
+  const cards = [...container.querySelectorAll(".clip-card")];
+  cards.forEach((el) => {
+    const open = () => openEditor(el.dataset.id);
+    el.onclick = open;
+    el.onfocus = () => selectGridClip(el.dataset.id, { focus: false });
+    el.onkeydown = (e) => {
+      if (e.key === "Enter" || e.key === " ") {
+        e.preventDefault();
+        open();
+      } else if (e.key === "ArrowDown" || e.key === "j" || e.key === "J") {
+        e.preventDefault();
+        navigateGrid(1);
+      } else if (e.key === "ArrowUp" || e.key === "k" || e.key === "K") {
+        e.preventDefault();
+        navigateGrid(-1);
+      } else if (e.key === "a" || e.key === "A") {
+        e.preventDefault();
+        setClipStatus("approved", { clipId: el.dataset.id });
+      } else if (e.key === "r" || e.key === "R") {
+        e.preventDefault();
+        setClipStatus("rejected", { clipId: el.dataset.id, rejectionReason: "bad_hook" });
+      }
+    };
   });
+}
+
+function renderClips(clips) {
+  state.candidates = clips;
+  const list = $("clips-list");
+  list.innerHTML = renderClipsHtml(clips);
+  bindClipCards(list);
+  if (state.selectedClipId && clips.some((c) => c.id === state.selectedClipId)) {
+    selectGridClip(state.selectedClipId, { focus: false });
+  } else {
+    state.selectedClipId = null;
+  }
 }
 
 function getRange() {
@@ -425,7 +806,12 @@ async function openEditor(clipId) {
 
   $("editor-clip-title").textContent = clip.title || clip.id;
   $("editor-clip-meta").textContent =
-    `${fmtTime(clip.start)} – ${fmtTime(clip.end)} · ${Math.round(clip.end - clip.start)}s · ${clip.status}`;
+    `${fmtTime(clip.start)} – ${fmtTime(clip.end)} · ${Math.round(clip.end - clip.start)}s · ${statusLabel(clip.status)}`;
+
+  const rubricEl = $("editor-rubric");
+  const rubric = rubricHtml(clip);
+  rubricEl.innerHTML = rubric;
+  rubricEl.classList.toggle("hidden", !rubric);
 
   const player = $("player");
   player.src = `/api/jobs/${enc(state.jobId)}/video`;
@@ -567,7 +953,7 @@ function onEditorKeydown(e) {
   if (state.view !== "editor") return;
   if (state.editingWord >= 0) return;
   const tag = document.activeElement?.tagName;
-  if (tag === "INPUT" || tag === "TEXTAREA") return;
+  if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT") return;
 
   const player = $("player");
   switch (e.key) {
@@ -597,6 +983,16 @@ function onEditorKeydown(e) {
     case "]":
       nudgeRange("end", e.shiftKey ? -NUDGE : NUDGE);
       break;
+    case "a":
+    case "A":
+      e.preventDefault();
+      setClipStatus("approved");
+      break;
+    case "r":
+    case "R":
+      e.preventDefault();
+      setClipStatus("rejected");
+      break;
     default:
       break;
   }
@@ -614,32 +1010,57 @@ async function saveRange() {
   toast("Rango guardado");
 }
 
-async function setClipStatus(status) {
+async function setClipStatus(status, { clipId, rejectionReason } = {}) {
+  const id = clipId || state.clip?.id;
+  if (!id) return;
+
   const body = { status };
   if (status === "rejected") {
-    const reason = $("reject-reason").value;
-    if (!reason) {
-      toast("Elegí una razón de rechazo");
-      return;
+    let reason = rejectionReason;
+    if (!reason && state.view === "editor") {
+      reason = $("reject-reason").value;
+      if (!reason) {
+        toast("Elegí una razón de rechazo");
+        return;
+      }
     }
+    if (!reason) reason = "bad_hook";
     body.rejection_reason = reason;
   }
-  const clip = await api(`/jobs/${enc(state.jobId)}/clips/${state.clip.id}`, {
+
+  const clip = await api(`/jobs/${enc(state.jobId)}/clips/${id}`, {
     method: "PATCH",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(body),
   });
-  state.clip = clip;
-  $("editor-clip-meta").textContent =
-    `${fmtTime(clip.start)} – ${fmtTime(clip.end)} · ${Math.round(clip.end - clip.start)}s · ${clip.status}`;
-  toast(status === "approved" ? "Aprobado" : "Rechazado");
+
+  if (state.clip?.id === id) {
+    state.clip = clip;
+    $("editor-clip-meta").textContent =
+      `${fmtTime(clip.start)} – ${fmtTime(clip.end)} · ${Math.round(clip.end - clip.start)}s · ${statusLabel(clip.status)}`;
+  }
+
+  if (state.view === "job") {
+    const idx = state.candidates.findIndex((c) => c.id === id);
+    if (idx >= 0) state.candidates[idx] = clip;
+    renderClips(state.candidates);
+    selectGridClip(clip.id, { focus: false });
+  }
+
+  toast(status === "approved" ? "Clip aprobado" : "Clip rechazado");
   await refreshEval();
+  if (status === "approved") await loadCaptionPreview();
 }
 
 function renderWords(words) {
   const list = $("words-list");
   if (!words.length) {
-    list.innerHTML = `<p class="meta">Sin palabras en este rango.</p>`;
+    list.innerHTML = emptyState(
+      "💬",
+      "Sin subtítulos en este rango",
+      "Ajustá el inicio y fin del clip, o esperá a que la transcripción cubra este tramo.",
+      { compact: true },
+    );
     return;
   }
   list.innerHTML = words.map((w, i) =>
@@ -710,10 +1131,22 @@ $("btn-render").onclick = async () => {
   setTimeout(refreshJob, 2000);
 };
 
+$("btn-repropose").onclick = async () => {
+  if (!confirm("¿Re-proponer clips con el motor actual? Se reemplazan los candidatos actuales.")) return;
+  try {
+    await api(`/jobs/${enc(state.jobId)}/repropose`, { method: "POST" });
+    toast("Re-proposición iniciada");
+    startPoll();
+    await refreshJob();
+  } catch (e) {
+    toast(e.message);
+  }
+};
+
 $("btn-run-eval").onclick = async () => {
   try {
     const rep = await api(`/jobs/${enc(state.jobId)}/eval`, { method: "POST" });
-    toast(`precision@${rep.n}: ${Math.round(rep.precision_at_n * 100)}%`);
+    toast(`Precisión@${rep.n}: ${Math.round(rep.precision_at_n * 100)}%`);
     await refreshEval();
   } catch (e) {
     toast(e.message);
@@ -754,4 +1187,7 @@ async function uploadFile(file) {
 }
 
 loadJobs();
+bindProposePrefsOnce();
+bindRenderPrefsOnce();
+bindGridKeyboardOnce();
 startPoll();

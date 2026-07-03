@@ -106,6 +106,20 @@ VC_TARGET_CLIPS=12          # cupo final tras dedupe
 VC_WHISPER_CHUNK_SECONDS=600  # trozos ASR para videos largos (Windows)
 ```
 
+## Subtítulos
+
+Default: **karaoke** (Montserrat, palabra resaltada). Para Shorts/Reels:
+
+```env
+VC_CAPTION_STYLE=social   # Anton bold, lineas cortas
+VC_CAPTION_STYLE=both     # genera karaoke + social (9x16 y 16x9 cada uno)
+VC_CAPTION_SOCIAL_WORDS=5
+```
+
+Los renders quedan en `work/<job>/clips/<clip_id>/` con `.ass` y `.mp4` por variante.
+
+En la **UI web**, dentro de cada job, panel **Opciones de export**: estilo de subtítulos, palabras por línea (social), vertical/horizontal. Se guarda en `render_prefs.json` por job (defaults desde `.env` si no tocás nada).
+
 ## Resume del pipeline
 
 `process` y **Reintentar** en la UI saltan etapas cuyos artefactos ya existen

@@ -142,15 +142,26 @@ def stage_propose(source: Path, *, track: bool = True) -> None:
 
     signals = storage.load_signals(workdir)
 
+    propose_prefs = storage.load_propose_prefs(workdir)
+
     scorer = get_scorer()
 
-    raw = scorer.propose(transcript, signals)
+    raw = scorer.propose(transcript, signals, propose_prefs=propose_prefs)
 
     # Pasada 2 (rank+refine) solo en el path LLM; el heurístico no llama al modelo.
     if settings.scorer != "heuristic":
-        raw = rank(raw, transcript, signals)
+        golden = storage.load_golden(workdir, str(source))
+        raw = rank(
+            raw,
+            transcript,
+            signals,
+            golden=golden,
+            finalists=propose_prefs.rank_finalists,
+            min_duration=propose_prefs.min_duration,
+            max_duration=propose_prefs.max_duration,
+        )
 
-    selected = refine(raw, transcript, signals)
+    selected = refine(raw, transcript, signals, propose_prefs=propose_prefs)
 
     storage.save_candidates(CandidateSet(source=str(source), candidates=selected), workdir)
 
@@ -185,6 +196,7 @@ def stage_render(source: Path, only_approved: bool = True, *, track: bool = True
     cset = storage.load_candidates(workdir)
 
     clips_dir = workdir / "clips"
+    prefs = storage.load_render_prefs(workdir)
 
 
 
@@ -216,7 +228,7 @@ def stage_render(source: Path, only_approved: bool = True, *, track: bool = True
 
     for i, c in enumerate(targets):
 
-        c.outputs = render_clip_cwd(Path(source), c, transcript, clips_dir)
+        c.outputs = render_clip_cwd(Path(source), c, transcript, clips_dir, prefs=prefs)
 
         if track:
 

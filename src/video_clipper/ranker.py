@@ -8,15 +8,22 @@ with a fake (no network in tests).
 
 from __future__ import annotations
 
+import json
+from copy import deepcopy
+
 from rich.console import Console
 
-from .clip_utils import transcript_text, words_in_range
+from .clip_utils import clamp_range, transcript_text, words_in_range
 from .config import settings
-from .models import ClipCandidate, Signals, Transcript
+from .propose_prefs import ProposePrefs, default_propose_prefs
+from .few_shot import build_rank_few_shot
+from .models import ClipCandidate, GoldenSet, Signals, Transcript
 from .router import get_router
 from .rubric import combine_score
 
 console = Console()
+
+_MAX_RANK_ATTEMPTS = 2
 
 
 def _clips_block(candidates: list[ClipCandidate], transcript: Transcript) -> str:
@@ -27,13 +34,52 @@ def _clips_block(candidates: list[ClipCandidate], transcript: Transcript) -> str
     return "\n\n".join(lines)
 
 
+def _run_rank_router(router, payload: dict) -> dict:
+    """Call rank_moments with retry on parse/transport failures."""
+    last_err: Exception | None = None
+    for attempt in range(_MAX_RANK_ATTEMPTS):
+        try:
+            result = router.run("rank_moments", payload)
+            if isinstance(result, dict) and isinstance(result.get("clips"), list):
+                return result
+            last_err = ValueError("respuesta rank sin lista clips")
+        except (json.JSONDecodeError, KeyError, TypeError, ValueError, RuntimeError) as exc:
+            last_err = exc
+        if attempt + 1 < _MAX_RANK_ATTEMPTS:
+            console.log(f"[yellow]Rank[/]: intento {attempt + 1} fallo, reintentando...")
+    if last_err:
+        console.log(f"[yellow]Rank[/]: sin respuesta valida ({last_err}), fallback scan")
+    return {"clips": []}
+
+
+def _apply_rank_row(c: ClipCandidate, row: dict, weights: tuple[float, float, float, float]) -> None:
+    c.hook_strength = float(row.get("hook_strength", 0))
+    c.self_contained = float(row.get("self_contained", 0))
+    c.takeaway_clarity = float(row.get("takeaway_clarity", 0))
+    c.payoff = float(row.get("payoff", 0))
+    if "start" in row and "end" in row:
+        c.start, c.end = float(row["start"]), float(row["end"])
+    if row.get("title"):
+        c.title = row["title"]
+    if row.get("hook"):
+        c.hook = row["hook"]
+    if row.get("reason"):
+        c.reason = row["reason"]
+    c.score = combine_score(
+        c.hook_strength, c.self_contained, c.takeaway_clarity, c.payoff, weights
+    )
+
+
 def rank(
     candidates: list[ClipCandidate],
     transcript: Transcript,
     signals: Signals,
     router=None,
     *,
+    golden: GoldenSet | None = None,
     finalists: int | None = None,
+    min_duration: float | None = None,
+    max_duration: float | None = None,
     weights: tuple[float, float, float, float] | None = None,
 ) -> list[ClipCandidate]:
     """Score the scan finalists on the rubric and refine their boundaries (pass 2)."""
@@ -41,7 +87,10 @@ def rank(
         return []
 
     router = router or get_router()
-    finalists = finalists or settings.rank_finalists
+    prefs = default_propose_prefs()
+    finalists = finalists if finalists is not None else prefs.rank_finalists
+    min_d = min_duration if min_duration is not None else prefs.min_duration
+    max_d = max_duration if max_duration is not None else prefs.max_duration
     weights = weights or (
         settings.w_hook,
         settings.w_self_contained,
@@ -50,38 +99,35 @@ def rank(
     )
 
     top = sorted(candidates, key=lambda c: c.score, reverse=True)[:finalists]
-    by_id = {c.id: c for c in top}
+    by_id = {c.id: deepcopy(c) for c in top}
 
-    result = router.run(
-        "rank_moments",
-        {
-            "clips_block": _clips_block(top, transcript),
-            "min_duration": settings.min_duration,
-            "max_duration": settings.max_duration,
-        },
-    )
+    payload = {
+        "clips_block": _clips_block(top, transcript),
+        "min_duration": min_d,
+        "max_duration": max_d,
+        "few_shot": build_rank_few_shot(golden, transcript) if golden else "",
+    }
+    result = _run_rank_router(router, payload)
 
     ranked: list[ClipCandidate] = []
-    for r in result.get("clips", []):
-        c = by_id.get(r.get("id"))
-        if c is None:
+    seen: set[str] = set()
+    for row in result.get("clips", []):
+        cid = row.get("id")
+        base = by_id.get(cid)
+        if base is None:
             continue
-        c.hook_strength = float(r.get("hook_strength", 0))
-        c.self_contained = float(r.get("self_contained", 0))
-        c.takeaway_clarity = float(r.get("takeaway_clarity", 0))
-        c.payoff = float(r.get("payoff", 0))
-        if "start" in r and "end" in r:
-            c.start, c.end = float(r["start"]), float(r["end"])
-        if r.get("title"):
-            c.title = r["title"]
-        if r.get("hook"):
-            c.hook = r["hook"]
-        if r.get("reason"):
-            c.reason = r["reason"]
-        c.score = combine_score(
-            c.hook_strength, c.self_contained, c.takeaway_clarity, c.payoff, weights
-        )
+        c = deepcopy(base)
+        _apply_rank_row(c, row, weights)
+        c.start, c.end = clamp_range(c.start, c.end, transcript.duration)
         ranked.append(c)
+        seen.add(c.id)
+
+    for c in top:
+        if c.id in seen:
+            continue
+        fallback = deepcopy(c)
+        console.log(f"[yellow]Rank[/]: clip {c.id} sin respuesta LLM, conservando score scan")
+        ranked.append(fallback)
 
     ranked.sort(key=lambda c: c.score, reverse=True)
     console.log(f"[cyan]Rank[/]: {len(ranked)} finalistas puntuados")

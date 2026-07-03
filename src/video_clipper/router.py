@@ -65,9 +65,17 @@ def build_rank_prompt(payload: dict) -> tuple[str, str]:
         "comparable. El clip debe ABRIR en el hook (engancha en los primeros segundos) y CERRAR "
         "en un remate. Sé duro. Respondé SOLO JSON válido."
     )
+    few_shot = payload.get("few_shot") or ""
+    few_shot_block = f"\n\n{few_shot}\n" if few_shot else ""
     user = (
         "Clips finalistas:\n\n"
-        f"{payload['clips_block']}\n\n"
+        f"{payload['clips_block']}"
+        f"{few_shot_block}\n"
+        "Reglas estrictas:\n"
+        "- Devolvé UN entry por cada clip listado (mismo id).\n"
+        "- Los timestamps start/end deben ser segundos del transcript dado (no inventar).\n"
+        "- Los clips NO deben solaparse entre si.\n"
+        "- Cada clip debe durar entre min y max segundos.\n\n"
         "Para cada clip devolvé las sub-scores 0-100 y los cortes hook-first. Formato JSON:\n"
         '{"clips": [{"id": str, "hook_strength": 0-100, "self_contained": 0-100, '
         '"takeaway_clarity": 0-100, "payoff": 0-100, "start": float, "end": float, '
